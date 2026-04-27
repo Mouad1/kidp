@@ -1,0 +1,139 @@
+<!DOCTYPE html>
+<html lang="fr">
+
+<head>
+  <meta charset="utf-8">
+  <title>Niche Research | KDP Dashboard</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+</head>
+
+<body class="bg-gray-50 text-gray-800 min-h-screen font-sans antialiased pb-20">
+  <header class="bg-white border-b border-gray-200 sticky top-0 z-10">
+    <div class="max-w-screen-xl mx-auto px-4 h-14 flex items-center justify-between">
+      <div class="flex items-center gap-3">
+        <a href="/" class="text-gray-400 hover:text-gray-600 font-semibold text-lg">←</a>
+        <h1 class="text-base font-semibold">🔍 Niche Research & Brainstorming (Module A)</h1>
+      </div>
+    </div>
+  </header>
+
+  <main class="max-w-screen-md mx-auto mt-8 px-4 space-y-6">
+
+    <!-- Instructions for non-technical users -->
+    <div class="bg-blue-50 border border-blue-200 rounded-xl p-5 text-sm text-blue-800">
+      <h2 class="font-semibold text-base mb-3 flex items-center gap-2">
+        <span>💡</span> Comment faire une recherche de Niche ?
+      </h2>
+      <ol class="list-decimal pl-5 space-y-2">
+        <li>Allez sur le site <a href="https://bookbolt.io" target="_blank"
+            class="text-blue-600 font-bold underline hover:text-blue-700">BookBolt.io</a> (Outil de recherche KDP).</li>
+        <li>Tapez une idée de base (ex: <em>"nostalgic anime coloring book"</em>) dans la barre de recherche des
+          produits.</li>
+        <li>Une fois les résultats affichés, cliquez sur le bouton <strong>"Export to CSV"</strong> pour télécharger le
+          fichier des statistiques.</li>
+        <li>Importez simplement ce fichier <code>.csv</code> ci-dessous ! L'Intelligence Artificielle va analyser la
+          compétition et vous proposer 3 sous-niches rentables.</li>
+      </ol>
+    </div>
+
+    <div class="bg-white border border-gray-200 rounded-xl p-6">
+      <h2 class="text-sm font-semibold mb-4">Étape 1 : Importer les données</h2>
+      <form id="niche-form" onsubmit="analyzeNiche(event)" class="space-y-4">
+        <div>
+          <label class="text-xs text-gray-500 block mb-1">Base Niche Concept</label>
+          <input type="text" id="niche-input" required placeholder="e.g. nostalgic anime coloring book adults"
+            class="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500">
+        </div>
+        <div>
+          <label class="text-xs text-gray-500 block mb-1">CSV Export</label>
+          <input type="file" id="csv-input" accept=".csv" required
+            class="w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-indigo-50 file:text-indigo-700 hover:file:bg-indigo-100">
+        </div>
+        <button type="submit" id="submit-btn"
+          class="w-full bg-indigo-600 text-white rounded-lg py-2 hover:bg-indigo-700 font-medium transition-colors">
+          Analyses Data via Gemini
+        </button>
+      </form>
+    </div>
+
+    <!-- Results display -->
+    <div id="results" class="hidden space-y-4">
+      <h2 class="text-sm font-semibold">Step 2: Subject Selection</h2>
+      <div id="suggestions" class="space-y-4"></div>
+    </div>
+  </main>
+
+  <script>
+    async function analyzeNiche(e) {
+      e.preventDefault();
+      const btn = document.getElementById('submit-btn');
+      const resultsDiv = document.getElementById('results');
+      const suggestsDiv = document.getElementById('suggestions');
+
+      const file = document.getElementById('csv-input').files[0];
+      const niche = document.getElementById('niche-input').value;
+
+      btn.disabled = true;
+      btn.innerHTML = '<svg class="animate-spin inline-block -ml-1 mr-2 h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg> <span class="animate-pulse">Analyse Gemini en cours (~15s)...</span>';
+
+      // Cache results during processing
+      resultsDiv.classList.add('hidden');
+      suggestsDiv.innerHTML = '';
+
+
+      const fd = new FormData();
+      fd.append('csv_file', file);
+      fd.append('niche', niche);
+
+      try {
+        const res = await fetch('/api/niche-research', {
+          method: 'POST',
+          body: fd
+        });
+
+        if (!res.ok) {
+          let errMsg = 'Server Error';
+          try {
+            const err = await res.json();
+            errMsg = err.detail || err.error || 'Server Error';
+          } catch (e) {
+            errMsg = "Erreur Serveur (500) - Vérifiez les logs backend";
+          }
+          throw new Error(errMsg);
+        }
+
+        const data = await res.json();
+
+        if (data.error) {
+          throw new Error(data.error);
+        }
+
+        suggestsDiv.innerHTML = '';
+        data.forEach(subniche => {
+          suggestsDiv.innerHTML += \`
+            <div class="bg-white border border-gray-200 rounded-xl p-5 hover:border-indigo-300 transition-colors">
+              <h3 class="text-base font-bold text-indigo-700 mb-2">\${subniche.title}</h3>
+              <p class="text-sm text-gray-600 mb-2"><strong>Concept:</strong> \${subniche.description}</p>
+              <p class="text-sm text-gray-600 mb-2"><strong>Audience:</strong> \${subniche.target_audience}</p>
+              <p class="text-sm text-green-700 bg-green-50 rounded border border-green-100 p-2 mt-3">
+                <strong>Why it works:</strong> \${subniche.why_it_works}
+              </p>
+            </div>
+          \`;
+        });
+        
+        resultsDiv.classList.remove('hidden');
+      } catch (err) {
+        console.error("Erreur Niche:", err);
+        alert("Erreur: " + err.message);
+        suggestsDiv.innerHTML = `< div class="p-4 bg-red-50 text-red-700 rounded-lg border border-red-200" > Erreur : ${ err.message }</div >`;
+        resultsDiv.classList.remove('hidden');
+      } finally {
+        btn.disabled = false;
+        btn.innerText = 'Analyser via Gemini';
+      }
+    }
+  </script>
+</body>
+
+</html>

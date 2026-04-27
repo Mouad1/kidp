@@ -1,0 +1,300 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>New Book — KDP Dashboard</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+</head>
+
+<body class="bg-gray-50 text-gray-900 min-h-screen">
+
+  <header class="bg-white border-b border-gray-200 px-6 py-4 flex items-center gap-4">
+    <a href="/" class="text-gray-400 hover:text-gray-700 text-sm">← Dashboard</a>
+    <h1 class="text-lg font-bold">New Book</h1>
+  </header>
+
+  <main class="max-w-3xl mx-auto px-6 py-8 space-y-8">
+
+    <div id="toast"
+      class="hidden fixed top-4 right-4 bg-gray-900 text-white text-sm px-4 py-2 rounded-lg shadow-lg z-50"></div>
+
+    <div class="bg-white border border-gray-200 rounded-xl p-6 space-y-6">
+      <div>
+        <h2 class="font-semibold text-sm mb-3">Catégorie du Livre</h2>
+        <div class="flex gap-4">
+          <label class="flex items-center gap-2 cursor-pointer">
+            <input type="radio" name="category" value="coloring" checked onchange="toggleCategory()"
+              class="text-indigo-600 focus:ring-indigo-500" />
+            <span class="text-sm">Coloring Book (Tableau de personnages)</span>
+          </label>
+          <label class="flex items-center gap-2 cursor-pointer">
+            <input type="radio" name="category" value="story" onchange="toggleCategory()"
+              class="text-indigo-600 focus:ring-indigo-500" />
+            <span class="text-sm">Story Book (Script / Histoire)</span>
+          </label>
+        </div>
+      </div>
+
+      <div class="border-t border-gray-100"></div>
+
+      <h2 class="font-semibold text-sm mt-4">Étape 1 — Identité</h2>
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div>
+          <label class="text-xs text-gray-500 block mb-1">Slug <span class="text-red-400">*</span></label>
+          <input id="new-slug" type="text" placeholder="book3-shonen"
+            class="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+          <p class="text-xs text-gray-400 mt-1">Minuscules, chiffres, tirets. Ex: book3-shonen</p>
+        </div>
+        <div>
+          <label class="text-xs text-gray-500 block mb-1">Author <span class="text-red-400">*</span></label>
+          <input id="new-author" type="text" value="Marco Belghiti"
+            class="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+        </div>
+        <div class="md:col-span-2">
+          <label class="text-xs text-gray-500 block mb-1">Title <span class="text-red-400">*</span></label>
+          <input id="new-title" type="text" placeholder="Shonen Legends: Coloring Our Stories"
+            class="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+        </div>
+        <div class="md:col-span-2">
+          <label class="text-xs text-gray-500 block mb-1">Subtitle</label>
+          <input id="new-subtitle" type="text" placeholder="A coloring book for dads who never grew up"
+            class="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+        </div>
+      </div>
+    </div>
+
+    <div id="coloring-mode" class="bg-white border border-gray-200 rounded-xl overflow-hidden">
+      <div class="px-6 py-4 border-b border-gray-100 flex items-center justify-between">
+        <h2 class="font-semibold text-sm">Étape 2 — Personnages <span id="new-char-count"
+            class="text-gray-400 font-normal">(0)</span></h2>
+        <button onclick="addNewCharRow()"
+          class="text-xs bg-indigo-600 text-white rounded-lg px-3 py-1.5 hover:bg-indigo-700">
+          + Add Character
+        </button>
+      </div>
+      <div class="overflow-x-auto">
+        <table class="w-full text-sm">
+          <thead class="bg-gray-50 text-xs text-gray-500 uppercase tracking-wide">
+            <tr>
+              <th class="px-3 py-2 text-left w-24">ID</th>
+              <th class="px-3 py-2 text-left w-36">Name</th>
+              <th class="px-3 py-2 text-left w-36">Series</th>
+              <th class="px-3 py-2 text-left">Prompt</th>
+              <th class="px-3 py-2 text-center w-12"></th>
+            </tr>
+          </thead>
+          <tbody id="new-characters-tbody" class="divide-y divide-gray-100">
+            <tr id="empty-row">
+              <td colspan="5" class="px-4 py-8 text-center text-xs text-gray-400">
+                Aucun personnage — cliquez "+ Add Character" pour commencer
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <div id="story-mode" class="bg-white border border-gray-200 rounded-xl p-6 hidden relative">
+      <div class="mb-6 bg-gray-50 p-4 rounded-lg border border-gray-200">
+        <label class="text-sm font-bold text-gray-700 block mb-2">Format de l'histoire</label>
+        <div class="flex gap-4">
+          <label class="flex items-center gap-2 cursor-pointer">
+            <input type="radio" name="story_format" value="colored" checked
+              class="text-indigo-600 focus:ring-indigo-500" />
+            <span class="text-sm">Classique (Images en Couleur)</span>
+          </label>
+          <label class="flex items-center gap-2 cursor-pointer">
+            <input type="radio" name="story_format" value="coloring" class="text-indigo-600 focus:ring-indigo-500" />
+            <span class="text-sm">Coloriage (Line art Noir & Blanc)</span>
+          </label>
+        </div>
+      </div>
+
+      <div class="flex items-center justify-between mb-2">
+        <h2 class="font-semibold text-sm">Étape 2 — Story Script Template</h2>
+        <button onclick="loadStoryTemplate()"
+          class="text-xs bg-indigo-50 text-indigo-700 hover:bg-indigo-100 px-3 py-1.5 rounded-lg font-medium transition-colors">
+          📝 Charger le Template Standard
+        </button>
+      </div>
+      <p class="text-xs text-gray-500 mb-4 leading-relaxed">
+        Suivez la structure du template ci-dessous pour garantir une génération parfaite.
+        L'IA s'occupera d'isoler la <strong>Charte Graphique</strong>, de générer les prompts anglais, et de
+        <strong>traduire le texte de chaque page</strong> en 4 langues (FR, EN, ES, AR).
+      </p>
+
+      <div class="bg-blue-50 border border-blue-100 rounded-lg p-3 mb-4 text-xs text-blue-800">
+        💡 <strong>Astuce (Photos Existantes) :</strong> Pour le moment, l'IA génère les images à partir de texte pur.
+        Si vous voulez "réutiliser" un personnage d'un livre existant, copiez <strong>exactement</strong> sa description
+        physique (vêtements, âge, traits) dans la Charte Graphique ci-dessous !
+      </div>
+
+      <textarea id="story-script" rows="20" placeholder="Cliquez sur 'Charger le Template Standard' pour commencer..."
+        class="w-full border border-gray-200 rounded-lg px-4 py-3 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-indigo-500 resize-y shadow-inner bg-gray-50"></textarea>
+    </div>
+
+    <div class="flex justify-end gap-3 mt-8 border-t border-gray-200 pt-6">
+      <a href="/"
+        class="border border-gray-200 text-sm font-medium rounded-lg px-5 py-2.5 hover:bg-gray-50 transition-colors">
+        Annuler
+      </a>
+      <button id="btn-create" onclick="createBook()"
+        class="bg-indigo-600 text-white text-sm font-bold rounded-lg px-6 py-2.5 hover:bg-indigo-700 transition-colors flex items-center justify-center min-w-[140px] shadow-sm">
+        <span>✅ Créer le Livre</span>
+      </button>
+    </div>
+
+  </main>
+
+  <script>
+    let newChars = [];
+
+    function addNewCharRow() {
+      newChars.push({ id: '', name: '', series: '', prompt: '' });
+      renderNewChars();
+    }
+
+    function deleteNewChar(i) {
+      newChars.splice(i, 1);
+      renderNewChars();
+    }
+
+    function renderNewChars() {
+      const tbody = document.getElementById('new-characters-tbody');
+      tbody.innerHTML = '';
+      if (newChars.length === 0) {
+        tbody.innerHTML = '<tr id="empty-row"><td colspan="5" class="px-4 py-8 text-center text-xs text-gray-400">Aucun personnage — cliquez "+ Add Character" pour commencer</td></tr>';
+      } else {
+        newChars.forEach((c, i) => {
+          const tr = document.createElement('tr');
+          tr.className = 'hover:bg-gray-50';
+          tr.innerHTML = `
+            <td class="px-3 py-2"><input type="text" value="${esc(c.id)}" placeholder="gojo"
+              oninput="newChars[${i}].id=this.value"
+              class="w-full border border-gray-200 rounded px-2 py-1 text-xs font-mono focus:outline-none focus:ring-1 focus:ring-indigo-400" /></td>
+            <td class="px-3 py-2"><input type="text" value="${esc(c.name)}" placeholder="The Hero"
+              oninput="newChars[${i}].name=this.value"
+              class="w-full border border-gray-200 rounded px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-indigo-400" /></td>
+            <td class="px-3 py-2"><input type="text" value="${esc(c.series)}" placeholder="Series"
+              oninput="newChars[${i}].series=this.value"
+              class="w-full border border-gray-200 rounded px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-indigo-400" /></td>
+            <td class="px-3 py-2"><textarea rows="2" placeholder="Prompt Gemini..."
+              oninput="newChars[${i}].prompt=this.value"
+              class="w-full border border-gray-200 rounded px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-indigo-400 resize-y">${esc(c.prompt)}</textarea></td>
+            <td class="px-3 py-2 text-center">
+              <button onclick="deleteNewChar(${i})" class="text-red-400 hover:text-red-600 text-xs">🗑</button>
+            </td>`;
+          tbody.appendChild(tr);
+        });
+      }
+      document.getElementById('new-char-count').textContent = `(${newChars.length})`;
+    }
+
+    function loadStoryTemplate() {
+      const template = `Partie 1 : La Charte Graphique des Personnages Fixes (Main Prompt)
+Style Artistique : [EX: Aquarelle douce, couleurs chaudes, Pixar 3D, etc...]
+
+Personnages Fixes :
+- [Nom du Héro] : [Âge], [Description physique très précise, vêtements, couleurs exactes].
+- [Nom Secondaire] : [Âge], [Description physique, accessoires constants].
+
+Lieu Général : [Ex: Un village dans les montagnes, une école magique, etc...]
+
+---
+Partie 2 : Le Livre de Contes (Pages)
+Veillez à garder cette structure par page. L'IA traduira le texte narratif.
+
+Page 1 : [Titre indicatif]
+Texte : [Le texte complet de l'histoire en français pour cette page]
+Valeur/Morale : [Une phrase d'apprentissage pour l'enfant]
+Image Prompt : [Description en anglais de la scène visuelle pour l'IA, ex: A textured watercolor illustration. The hero (fixed character) is doing X in the village...]
+
+Page 2 : [Titre indicatif]
+Texte : [Suite de l'histoire...]
+Valeur/Morale : [...]
+Image Prompt : [...]
+
+Page 3 : [Titre indicatif]
+Texte : [...]
+Valeur/Morale : [...]
+Image Prompt : [...]`;
+      document.getElementById('story-script').value = template;
+    }
+
+    function toggleCategory() {
+      const mode = document.querySelector('input[name="category"]:checked').value;
+      if (mode === "coloring") {
+        document.getElementById("coloring-mode").classList.remove("hidden");
+        document.getElementById("story-mode").classList.add("hidden");
+      } else {
+        document.getElementById("coloring-mode").classList.add("hidden");
+        document.getElementById("story-mode").classList.remove("hidden");
+      }
+    }
+
+    async function createBook() {
+      const btn = document.getElementById('btn-create');
+      const category = document.querySelector('input[name="category"]:checked').value;
+      const story_format = document.querySelector('input[name="story_format"]:checked').value;
+      const slug = document.getElementById('new-slug').value.trim();
+      const title = document.getElementById('new-title').value.trim();
+      const subtitle = document.getElementById('new-subtitle').value.trim();
+      const author = document.getElementById('new-author').value.trim();
+      const story_script = document.getElementById('story-script').value.trim();
+
+      if (!slug || !title || !author) {
+        showToast('❌ Slug, Title et Author sont obligatoires');
+        return;
+      }
+      if (!/^[a-z0-9][a-z0-9-]*[a-z0-9]$/.test(slug)) {
+        showToast('❌ Slug invalide — minuscules, chiffres et tirets uniquement');
+        return;
+      }
+
+
+      btn.innerHTML = `<svg class="animate-spin -ml-1 mr-2 h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg> Génération (10s)...`;
+      btn.disabled = true;
+      btn.classList.add("opacity-75", "cursor-not-allowed");
+
+      try {
+        const res = await fetch('/api/books/new', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ category, story_format, slug, title, subtitle, author, characters: newChars, story_script }),
+        });
+
+        if (res.ok) {
+          const data = await res.json();
+          window.location.href = `/book/${data.slug}`;
+        } else {
+          const err = await res.json();
+          showToast(`❌ ${err.detail || 'Erreur lors de la création'}`);
+        }
+      } finally {
+        btn.innerHTML = "<span>✅ Create Book</span>";
+        btn.disabled = false;
+        btn.classList.remove("opacity-75", "cursor-not-allowed");
+      }
+    }
+
+    function showToast(msg) {
+      const t = document.getElementById('toast');
+      t.textContent = msg;
+      t.classList.remove('hidden');
+      setTimeout(() => t.classList.add('hidden'), 3500);
+    }
+
+    function esc(s) {
+      return String(s)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+    }
+  </script>
+</body>
+
+</html>

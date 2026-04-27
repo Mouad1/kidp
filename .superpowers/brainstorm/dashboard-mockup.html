@@ -1,0 +1,298 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Dashboard Mockup — Generate Panel</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; }
+    .tag { @apply inline-flex items-center gap-1 bg-indigo-50 text-indigo-700 text-xs px-2 py-0.5 rounded-full cursor-pointer hover:bg-indigo-100 border border-indigo-200; }
+    .tag.active { @apply bg-indigo-600 text-white border-indigo-600; }
+  </style>
+</head>
+<body class="bg-gray-100 min-h-screen">
+
+<!-- Simulated page header -->
+<header class="bg-white border-b border-gray-200 px-6 py-3 flex items-center gap-4">
+  <span class="text-gray-400 text-sm">← Dashboard</span>
+  <h1 class="text-base font-bold">Modern Legends: Coloring Our Stories</h1>
+  <span class="text-xs text-gray-400">book2-modern-anime</span>
+</header>
+
+<!-- Main layout: content + side panel -->
+<div class="flex h-[calc(100vh-53px)]">
+
+  <!-- LEFT: existing book content (condensed) -->
+  <div class="flex-1 overflow-y-auto p-6 space-y-4">
+
+    <!-- Action bar -->
+    <div class="flex flex-wrap gap-2">
+      <button onclick="openPanel()" class="flex items-center gap-2 bg-indigo-600 text-white text-sm rounded-lg px-4 py-2 hover:bg-indigo-700 transition-colors shadow-sm">
+        🤖 Generate Image
+        <span class="bg-indigo-500 text-xs px-1.5 py-0.5 rounded">+ New</span>
+      </button>
+      <button class="flex items-center gap-2 bg-gray-700 text-white text-sm rounded-lg px-4 py-2 hover:bg-gray-600 transition-colors">
+        🧹 Clean All
+        <span class="text-xs text-gray-400 ml-1">auto-crop + remove artifacts</span>
+      </button>
+      <button class="flex items-center gap-2 bg-green-600 text-white text-sm rounded-lg px-4 py-2 hover:bg-green-700 transition-colors">
+        ⚙️ Assemble PDF
+        <span class="text-xs text-green-300 ml-1">24 pages → PDF</span>
+      </button>
+    </div>
+
+    <!-- Stats -->
+    <div class="grid grid-cols-4 gap-3">
+      <div class="bg-white border border-gray-200 rounded-xl p-4 text-center">
+        <p class="text-2xl font-bold">24</p>
+        <p class="text-xs text-gray-500 mt-1">In sequence</p>
+      </div>
+      <div class="bg-white border border-gray-200 rounded-xl p-4 text-center">
+        <p class="text-2xl font-bold text-green-600">0</p>
+        <p class="text-xs text-gray-500 mt-1">Missing</p>
+      </div>
+      <div class="bg-white border border-gray-200 rounded-xl p-4 text-center">
+        <p class="text-2xl font-bold text-yellow-600">1</p>
+        <p class="text-xs text-gray-500 mt-1">⚠ Suspicious</p>
+      </div>
+      <div class="bg-white border border-gray-200 rounded-xl p-4 text-center">
+        <p class="text-2xl font-bold text-green-600">✓</p>
+        <p class="text-xs text-gray-500 mt-1">PDF 32.8 MB</p>
+      </div>
+    </div>
+
+    <!-- Images table (truncated for mockup) -->
+    <div class="bg-white border border-gray-200 rounded-xl overflow-hidden">
+      <div class="px-5 py-3 border-b border-gray-100 flex items-center justify-between">
+        <h2 class="font-semibold text-sm">Images in PAGE_SEQUENCE</h2>
+        <span class="text-xs text-gray-400">24 pages</span>
+      </div>
+      <table class="w-full text-sm">
+        <thead class="bg-gray-50 text-xs text-gray-500 uppercase">
+          <tr>
+            <th class="px-4 py-2 text-left">#</th>
+            <th class="px-4 py-2 text-left">File</th>
+            <th class="px-4 py-2 text-left">Label</th>
+            <th class="px-4 py-2 text-right">Size</th>
+            <th class="px-4 py-2 text-center">Status</th>
+            <th class="px-4 py-2 text-center">Actions</th>
+          </tr>
+        </thead>
+        <tbody class="divide-y divide-gray-100">
+          <tr class="hover:bg-gray-50">
+            <td class="px-4 py-2 text-gray-400 text-xs">1</td>
+            <td class="px-4 py-2 font-mono text-xs">book2_gojo.png</td>
+            <td class="px-4 py-2 text-gray-700">The Boundless Sorcerer</td>
+            <td class="px-4 py-2 text-right text-xs text-gray-500">593 KB</td>
+            <td class="px-4 py-2 text-center"><span class="bg-green-100 text-green-800 text-xs px-2 py-0.5 rounded-full">✓ OK</span></td>
+            <td class="px-4 py-2 text-center text-xs text-gray-400 space-x-2">
+              <button class="hover:text-gray-700 underline">clean</button>
+              <button class="hover:text-indigo-600 underline">regen</button>
+            </td>
+          </tr>
+          <tr class="bg-yellow-50 hover:bg-yellow-100">
+            <td class="px-4 py-2 text-gray-400 text-xs">2</td>
+            <td class="px-4 py-2 font-mono text-xs">book2_sung_jinwoo.png</td>
+            <td class="px-4 py-2 text-gray-700">The Shadow Monarch</td>
+            <td class="px-4 py-2 text-right text-xs text-yellow-600 font-medium">142 KB</td>
+            <td class="px-4 py-2 text-center"><span class="bg-yellow-100 text-yellow-800 text-xs px-2 py-0.5 rounded-full">⚠ Check</span></td>
+            <td class="px-4 py-2 text-center text-xs space-x-2">
+              <button class="text-gray-400 hover:text-gray-700 underline">clean</button>
+              <button class="text-indigo-500 hover:text-indigo-700 underline font-medium">regen</button>
+            </td>
+          </tr>
+          <tr class="hover:bg-gray-50">
+            <td class="px-4 py-2 text-gray-400 text-xs">3</td>
+            <td class="px-4 py-2 font-mono text-xs">book2_levi.png</td>
+            <td class="px-4 py-2 text-gray-700">Humanity's Strongest</td>
+            <td class="px-4 py-2 text-right text-xs text-gray-500">607 KB</td>
+            <td class="px-4 py-2 text-center"><span class="bg-green-100 text-green-800 text-xs px-2 py-0.5 rounded-full">✓ OK</span></td>
+            <td class="px-4 py-2 text-center text-xs text-gray-400 space-x-2">
+              <button class="hover:text-gray-700 underline">clean</button>
+              <button class="hover:text-indigo-600 underline">regen</button>
+            </td>
+          </tr>
+          <tr class="text-gray-300">
+            <td class="px-4 py-2 text-center" colspan="6">· · · 21 more rows · · ·</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- RIGHT: Generate side panel -->
+  <div id="panel" class="w-[420px] bg-white border-l border-gray-200 flex flex-col overflow-hidden shadow-xl">
+
+    <!-- Panel header -->
+    <div class="px-5 py-4 border-b border-gray-100 flex items-center justify-between bg-gray-50">
+      <div>
+        <h2 class="font-bold text-sm">🤖 Generate Image</h2>
+        <p class="text-xs text-gray-400 mt-0.5">Gemini API · gemini-2.5-flash-image</p>
+      </div>
+      <button onclick="closePanel()" class="text-gray-400 hover:text-gray-600 text-lg leading-none">✕</button>
+    </div>
+
+    <!-- Scrollable form body -->
+    <div class="flex-1 overflow-y-auto p-5 space-y-5">
+
+      <!-- Subject -->
+      <div>
+        <label class="block text-xs font-semibold text-gray-700 mb-1.5">Subject <span class="text-red-400">*</span></label>
+        <input type="text" value="The Shadow Monarch"
+               class="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400"
+               placeholder="e.g. The Shadow Monarch, a dragon, a samurai..."/>
+        <p class="text-xs text-gray-400 mt-1">Name or label for this image (used as the book page label)</p>
+      </div>
+
+      <!-- Description -->
+      <div>
+        <label class="block text-xs font-semibold text-gray-700 mb-1.5">Character description</label>
+        <textarea rows="3"
+                  class="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400 resize-none"
+                  placeholder="Physical traits, outfit, accessories...">powerful anime hunter with short dark hair and cold purple eyes, long monarch coat with detailed silver trim</textarea>
+        <p class="text-xs text-gray-400 mt-1">Avoid color names like "black" or "dark" — describe texture/pattern instead</p>
+      </div>
+
+      <!-- Art style -->
+      <div>
+        <label class="block text-xs font-semibold text-gray-700 mb-2">Art style</label>
+        <div class="flex flex-wrap gap-2" id="style-tags">
+          <span class="tag active" onclick="toggleTag(this)">thick outlines</span>
+          <span class="tag" onclick="toggleTag(this)">thin detailed lines</span>
+          <span class="tag" onclick="toggleTag(this)">chibi style</span>
+          <span class="tag" onclick="toggleTag(this)">realistic proportions</span>
+          <span class="tag" onclick="toggleTag(this)">manga style</span>
+        </div>
+      </div>
+
+      <!-- Pose / ambiance -->
+      <div>
+        <label class="block text-xs font-semibold text-gray-700 mb-2">Pose / ambiance</label>
+        <div class="flex flex-wrap gap-2">
+          <span class="tag active" onclick="toggleTag(this)">standing portrait</span>
+          <span class="tag" onclick="toggleTag(this)">action pose</span>
+          <span class="tag" onclick="toggleTag(this)">dynamic battle scene</span>
+          <span class="tag" onclick="toggleTag(this)">calm expression</span>
+          <span class="tag" onclick="toggleTag(this)">walking forward</span>
+        </div>
+      </div>
+
+      <!-- Additional elements -->
+      <div>
+        <label class="block text-xs font-semibold text-gray-700 mb-2">Additional elements</label>
+        <div class="flex flex-wrap gap-2">
+          <span class="tag" onclick="toggleTag(this)">weapon</span>
+          <span class="tag" onclick="toggleTag(this)">energy aura</span>
+          <span class="tag" onclick="toggleTag(this)">companion animal</span>
+          <span class="tag" onclick="toggleTag(this)">background elements</span>
+          <span class="tag active" onclick="toggleTag(this)">shadow army silhouettes</span>
+          <span class="tag" onclick="toggleTag(this)">magical effects</span>
+          <span class="tag" onclick="toggleTag(this)">detailed environment</span>
+        </div>
+      </div>
+
+      <!-- Post-processing toggles -->
+      <div>
+        <label class="block text-xs font-semibold text-gray-700 mb-2">Post-processing</label>
+        <div class="space-y-2">
+          <label class="flex items-center justify-between bg-gray-50 rounded-lg px-3 py-2 cursor-pointer">
+            <div>
+              <p class="text-sm font-medium">Auto-clean after generation</p>
+              <p class="text-xs text-gray-400">Remove corner artifacts automatically</p>
+            </div>
+            <div class="relative">
+              <input type="checkbox" class="sr-only" id="toggle-clean" checked>
+              <div class="w-10 h-6 bg-indigo-500 rounded-full cursor-pointer" onclick="toggleSwitch('toggle-clean', this)"></div>
+              <div class="absolute top-1 left-1 w-4 h-4 bg-white rounded-full transition-transform translate-x-4" id="thumb-clean"></div>
+            </div>
+          </label>
+          <label class="flex items-center justify-between bg-gray-50 rounded-lg px-3 py-2 cursor-pointer">
+            <div>
+              <p class="text-sm font-medium">Auto-crop to portrait</p>
+              <p class="text-xs text-gray-400">Crop landscape images to 8.5×11 ratio</p>
+            </div>
+            <div class="relative">
+              <input type="checkbox" class="sr-only" id="toggle-crop" checked>
+              <div class="w-10 h-6 bg-indigo-500 rounded-full cursor-pointer" onclick="toggleSwitch('toggle-crop', this)"></div>
+              <div class="absolute top-1 left-1 w-4 h-4 bg-white rounded-full transition-transform translate-x-4" id="thumb-crop"></div>
+            </div>
+          </label>
+          <label class="flex items-center justify-between bg-gray-50 rounded-lg px-3 py-2 cursor-pointer">
+            <div>
+              <p class="text-sm font-medium">Add to PAGE_SEQUENCE</p>
+              <p class="text-xs text-gray-400">Automatically append to config.py</p>
+            </div>
+            <div class="relative">
+              <input type="checkbox" class="sr-only" id="toggle-seq">
+              <div class="w-10 h-6 bg-gray-200 rounded-full cursor-pointer" onclick="toggleSwitch('toggle-seq', this)" id="track-seq"></div>
+              <div class="absolute top-1 left-1 w-4 h-4 bg-white rounded-full transition-transform" id="thumb-seq"></div>
+            </div>
+          </label>
+        </div>
+      </div>
+
+      <!-- Prompt preview -->
+      <div>
+        <div class="flex items-center justify-between mb-1.5">
+          <label class="text-xs font-semibold text-gray-700">Prompt preview</label>
+          <button class="text-xs text-indigo-500 hover:text-indigo-700 underline" onclick="updatePreview()">Refresh</button>
+        </div>
+        <div id="prompt-preview"
+             class="bg-gray-900 text-green-300 text-xs rounded-lg p-3 font-mono leading-relaxed"
+             style="min-height: 80px;">
+Provide Professional adult coloring book page of <span class="text-yellow-300">powerful anime hunter with short dark hair and cold purple eyes, long monarch coat with detailed silver trim</span>, <span class="text-blue-300">standing portrait</span>, <span class="text-purple-300">shadow army silhouettes</span>, full body centered, pure white background. Thick, bold black vector-style outlines only. CRITICAL: zero black fills, zero solid black areas...
+        </div>
+      </div>
+
+    </div>
+
+    <!-- Panel footer: action -->
+    <div class="p-4 border-t border-gray-100 bg-gray-50 space-y-2">
+      <button class="w-full bg-indigo-600 text-white text-sm font-semibold rounded-lg px-4 py-3 hover:bg-indigo-700 transition-colors flex items-center justify-center gap-2">
+        🚀 Generate Image
+      </button>
+      <p class="text-center text-xs text-gray-400">~5-10 sec · ~$0.04 / image</p>
+    </div>
+  </div>
+
+</div>
+
+<script>
+  function openPanel() {
+    document.getElementById('panel').classList.remove('hidden');
+  }
+  function closePanel() {
+    document.getElementById('panel').classList.add('hidden');
+  }
+
+  function toggleTag(el) {
+    el.classList.toggle('active');
+    updatePreview();
+  }
+
+  function toggleSwitch(id, track) {
+    const cb = document.getElementById(id);
+    const thumb = document.getElementById('thumb-' + id.replace('toggle-', ''));
+    cb.checked = !cb.checked;
+    if (cb.checked) {
+      track.classList.remove('bg-gray-200');
+      track.classList.add('bg-indigo-500');
+      thumb.classList.add('translate-x-4');
+    } else {
+      track.classList.remove('bg-indigo-500');
+      track.classList.add('bg-gray-200');
+      thumb.classList.remove('translate-x-4');
+    }
+  }
+
+  function updatePreview() {
+    // Just a visual hint — real assembly is server-side
+    const preview = document.getElementById('prompt-preview');
+    const activeTags = [...document.querySelectorAll('.tag.active')].map(t => t.textContent);
+    const desc = document.querySelector('textarea').value;
+    preview.innerHTML = `Provide Professional adult coloring book page of <span class="text-yellow-300">${desc}</span>, <span class="text-blue-300">${activeTags.join(', ')}</span>, full body centered, pure white background. Thick, bold black vector-style outlines only. CRITICAL: zero black fills...`;
+  }
+</script>
+</body>
+</html>

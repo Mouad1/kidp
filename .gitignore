@@ -1,0 +1,19 @@
+# Output PDFs (large binary files — regenerate with pipeline/assemble.py)
+output/*.pdf
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+
+# macOS
+.DS_Store
+
+# Editor
+.vscode/
+.idea/
+
+# Excel / spreadsheet exports (tracked separately if needed)
+*.xlsx
+*.csv
+.env.local

@@ -1,0 +1,750 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>{{ book.title }} — KDP Dashboard</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    .char-card { transition: border-color .15s, background .15s; cursor: grab; }
+    .char-card:active { cursor: grabbing; }
+    .char-card.active { border-left-color: #6366f1; background: #eef2ff; }
+    .char-card.drag-over { border-left-color: #818cf8; background: #eef2ff; border-top: 2px dashed #a5b4fc; }
+    .char-card.dragging { opacity: 0.4; }
+    .col-scroll { overflow-y: auto; max-height: calc(100vh - 160px); }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .spin { animation: spin 1s linear infinite; display: inline-block; }
+  </style>
+</head>
+<body class="bg-gray-50 text-gray-900 min-h-screen">
+
+  <!-- Toast -->
+  <div id="toast" class="hidden fixed top-4 right-4 bg-gray-900 text-white text-sm px-4 py-2 rounded-lg shadow-lg z-50"></div>
+
+  <!-- PDF ready banner -->
+  <div id="pdf-ready-banner" class="hidden fixed bottom-6 left-1/2 -translate-x-1/2 bg-green-600 text-white rounded-2xl px-6 py-4 shadow-2xl flex items-center gap-4 z-50">
+    <span class="text-sm font-semibold">📄 PDF généré avec succès !</span>
+    <button onclick="openPDF()" class="bg-white text-green-700 text-sm font-semibold rounded-lg px-4 py-2 hover:bg-green-50 transition">📂 Ouvrir</button>
+    <button onclick="document.getElementById('pdf-ready-banner').classList.add('hidden')" class="text-green-200 hover:text-white text-lg leading-none">✕</button>
+  </div>
+
+  <!-- Header -->
+  <header class="bg-white border-b border-gray-200 px-6 py-3">
+    <div class="max-w-screen-2xl mx-auto">
+      <div class="flex items-center justify-between">
+        <div class="flex items-center gap-4">
+          <a href="/" class="text-gray-400 hover:text-gray-700 text-sm">← Dashboard</a>
+          <div>
+            <h1 class="text-base font-bold">{{ book.title }}</h1>
+            <p class="text-xs text-gray-400">{{ book_name }} · {{ book.author }}
+              · {{ book.present }} images
+              {% if book.missing %}<span class="text-red-400"> · {{ book.missing | length }} manquantes</span>{% endif %}
+              {% if book.pdf %}<span class="text-green-500"> · PDF ✓</span>{% else %}<span class="text-gray-300"> · pas de PDF</span>{% endif %}
+            </p>
+          </div>
+        </div>
+        <div class="flex items-center gap-2">
+          <button onclick="confirmGenerate('{{ book_name }}')"
+                  class="flex items-center gap-1.5 bg-indigo-600 text-white text-xs rounded-lg px-3 py-2 hover:bg-indigo-700">
+            🤖 Generate All
+          </button>
+          <button onclick="runAction('clean','{{ book_name }}')"
+                  class="flex items-center gap-1.5 bg-gray-700 text-white text-xs rounded-lg px-3 py-2 hover:bg-gray-600">
+            🔧 Fix All (lineart)
+          </button>
+          <button onclick="runAction('assemble','{{ book_name }}')"
+                  class="flex items-center gap-1.5 bg-green-600 text-white text-xs rounded-lg px-3 py-2 hover:bg-green-700">
+            📄 Build PDF
+          </button>
+        </div>
+      </div>
+    </div>
+  </header>
+
+  <!-- 3-column grid -->
+  <main class="max-w-screen-2xl mx-auto px-4 py-4"
+        style="display:grid;grid-template-columns:220px 1fr 340px;gap:12px;align-items:start">
+
+    <!-- ── Col 1: Character list ── -->
+    <div class="space-y-3">
+      <div class="bg-white border border-gray-200 rounded-xl overflow-hidden">
+        <div class="px-3 py-2.5 border-b border-gray-100 flex items-center justify-between">
+          <h2 class="font-semibold text-xs text-gray-600 uppercase tracking-wide">
+            Personnages <span id="char-count" class="text-gray-400 font-normal normal-case"></span>
+          </h2>
+          <div class="flex gap-1.5">
+            <button onclick="openGroupBuilder()"
+                    class="text-xs bg-gray-100 text-gray-700 rounded-md px-2 py-1 hover:bg-gray-200">
+              + Groupe
+            </button>
+                  <button onclick="openImportModal()" class="bg-teal-500 hover:bg-teal-600 text-white px-3 py-1.5 rounded-lg text-sm font-bold shadow transition-colors flex items-center gap-1">
+        ➕ Importer
+      </button>
+
+              <button onclick="openImportModal()" class="bg-teal-500 hover:bg-teal-600 text-white px-3 py-1.5 rounded-lg text-sm font-bold shadow transition-colors flex items-center gap-1">
+                ➕ Importer
+              </button>
+              <button onclick="addCharacterRow()" class="bg-indigo-600 hover:bg-indigo-700 text-white px-3 py-1.5 rounded-lg text-sm font-bold shadow transition-colors flex items-center gap-1">
+                ➕ Ajouter
+              </button>
+            </div>
+          </div>
+          <div class="col-scroll">
+            <table class="w-full text-left" id="characters-tbody">
+              <!-- Re-rendered by JS -->
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <!-- ── Col 2: Prompt Builder ── -->
+      <div class="bg-white border border-gray-200 rounded-xl overflow-hidden flex flex-col" style="height:calc(100vh - 110px);">
+        
+        <!-- Empty State -->
+        <div id="pb-empty" class="flex-1 flex items-center justify-center text-center p-8">
+          <div class="text-gray-400">
+            <span class="text-3xl block mb-2">🎨</span>
+            <p class="text-sm font-medium">Prompt Builder</p>
+            <p class="text-xs mt-1">Sélectionne un personnage ou clique sur "+ Groupe" à gauche</p>
+          </div>
+        </div>
+
+        <!-- Solo Panel -->
+        <div id="pb-solo" class="hidden flex-col h-full overflow-y-auto"></div>
+
+        <!-- Group Panel -->
+        <div id="pb-group" class="hidden flex-col h-full overflow-y-auto"></div>
+
+      </div>
+
+      <!-- ── Col 3: Sequence & Image Generation ── -->
+      <div class="space-y-3">
+        <div class="bg-white border border-gray-200 rounded-xl overflow-hidden flex flex-col" style="height:calc(100vh - 110px);">
+          <div class="px-3 py-2.5 border-b border-gray-100 flex items-center justify-between shrink-0">
+            <h2 class="font-semibold text-xs text-gray-600 uppercase tracking-wide">
+              Page Sequence
+            </h2>
+            <div class="text-[10px] text-gray-400 font-medium">
+              <span id="sequence-count" class="text-gray-600 font-bold">0</span> pages<br/>
+              <span id="sequence-missing" class="text-red-400 font-bold block text-right mt-0.5">0 manquantes</span>
+            </div>
+          </div>
+
+          <div class="p-2 border-b border-gray-100 bg-gray-50 flex gap-2 shrink-0">
+            <button onclick="runAction('generate','{{ book_name }}')"
+                    class="flex-1 bg-indigo-600 text-white text-xs font-semibold py-2 rounded-lg hover:bg-indigo-700 shadow-sm">
+              🤖 Generate all missing
+            </button>
+            <div class="w-8 flex items-center justify-center">
+              <div id="loading-spinner" class="hidden w-4 h-4 border-2 border-indigo-400 border-t-indigo-600 rounded-full spin"></div>
+            </div>
+          </div>
+
+          <!-- Console Output -->
+          <div id="console-wrapper" class="hidden flex-col h-48 border-b border-gray-200 shrink-0 bg-gray-900 relative">
+            <div class="flex justify-between items-center text-[10px] px-2 py-1 bg-gray-800 text-gray-400">
+              <span id="console-title" class="font-mono">Console</span>
+              <button onclick="closeConsole()" class="hover:text-white">✕ Fermer</button>
+            </div>
+            <pre id="stream-output" class="flex-1 p-2 text-[10px] font-mono text-green-400 overflow-y-auto whitespace-pre-wrap leading-tight"></pre>
+          </div>
+
+          <!-- Sequence List (drag & drop) -->
+          <div class="col-scroll flex-1 p-2 relative bg-gray-50" style="min-height: 0;">
+            <div class="absolute inset-0 overflow-y-auto p-2">
+              <div class="space-y-1.5" id="sequence-tbody">
+                <!-- Re-rendered by JS -->
+              </div>
+            </div>
+          </div>
+
+        </div>
+      </div>
+    </main>
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/Sortable/1.15.2/Sortable.min.js"></script>
+
+<script>
+    const BOOK_NAME = '{{ book_name }}';
+    let configData = null;
+
+    // ── Prompt Builder state ────────────────────────────────────────────────────
+    let allTags = null;
+    let builderMode = 'none'; // 'none' | 'solo' | 'group'
+    window.activeSoloIndex = null;
+
+    const PROMPT_TEMPLATE = (
+      "Provide Professional adult coloring book page of {cp}, " +
+      "full body centered, pure white background. " +
+      "Thick, bold black vector-style outlines only. " +
+      "CRITICAL: zero black fills, zero solid black areas anywhere on the body or clothing — " +
+      "all interior areas must be pure white and left empty for coloring. " +
+      "Zero shading, zero gray fills, zero gradients, zero color fills of any kind. " +
+      "High contrast, clean line art, 300 DPI quality, minimalist style ready for coloring."
+    );
+
+    let soloState = {
+      description: '', styleTags: [], poseTags: [],
+      elementTags: [], themeTags: [], extraNotes: ''
+    };
+
+    let groupState = {
+      charDescs: {},
+      charIds: [],
+      styleTags: [], elementTags: [], themeTags: [],
+      groupDynamic: '',
+      extraNotes: ''
+    };
+
+    // ── Prompt Builder System ────────────────────────────────────────────────────
+
+    function selectCharacter(i) {
+      window.activeSoloIndex = i;
+      builderMode = 'solo';
+      const chars = collectCharacters();
+      const c = chars[i];
+      soloState = {
+        description: c.prompt || '',
+        styleTags: [], poseTags: [], elementTags: [], themeTags: [],
+        extraNotes: ''
+      };
+      renderCharacters(chars); 
+      renderSoloPanel(c);
+    }
+
+    function renderSoloPanel(character) {
+      document.getElementById('pb-empty').classList.add('hidden');
+      document.getElementById('pb-group').classList.add('hidden');
+      const panel = document.getElementById('pb-solo');
+      panel.classList.remove('hidden');
+
+      panel.innerHTML = `
+        <div class="px-5 py-4 border-b border-gray-100 flex items-center justify-between">
+          <div>
+            <p class="font-semibold text-sm">${esc(character.name || character.id)}</p>
+            <p class="text-xs text-gray-400">${esc(character.id)}</p>
+          </div>
+          <button onclick="applySoloPrompt()" class="text-xs bg-indigo-600 text-white rounded-lg px-4 py-2 hover:bg-indigo-700">
+            💾 Apply
+          </button>
+        </div>
+        <div class="p-5 space-y-4">
+          <div>
+            <label class="text-xs text-gray-500 block mb-1">Description physique <span class="text-gray-400">(sans noms de couleur)</span></label>
+            <textarea id="pb-description" rows="3"
+              class="w-full border border-gray-200 rounded-lg px-3 py-2 text-xs resize-y focus:outline-none focus:ring-2 focus:ring-indigo-500"
+              oninput="soloState.description=this.value; updateSoloPreview()">${esc(soloState.description)}</textarea>
+          </div>
+          ${renderTagSection('Style', 'style', soloState.styleTags, 'styleTags')}
+          ${renderTagSection('Pose', 'pose', soloState.poseTags, 'poseTags')}
+          ${renderTagSection('Éléments', 'elements', soloState.elementTags, 'elementTags')}
+          ${renderTagSection('Thème', 'theme', soloState.themeTags, 'themeTags')}
+          <div>
+            <label class="text-xs text-gray-500 block mb-1">Notes supplémentaires</label>
+            <textarea id="pb-extra" rows="2"
+              class="w-full border border-gray-200 rounded-lg px-3 py-2 text-xs resize-y focus:outline-none focus:ring-2 focus:ring-indigo-500"
+              oninput="soloState.extraNotes=this.value; updateSoloPreview()"></textarea>
+          </div>
+          <div class="bg-gray-50 border border-gray-200 rounded-lg px-3 py-2 text-xs text-gray-500 flex items-center gap-2">
+            ⛔ <span>Zero shading · Zero gray fills · Zero gradients · Zero black fills</span>
+          </div>
+          <div>
+            <label class="text-xs text-gray-500 block mb-1">Aperçu du prompt</label>
+            <pre id="pb-preview" class="bg-gray-900 text-green-400 text-xs rounded-lg p-3 whitespace-pre-wrap break-words" style="max-height:160px;overflow-y:auto;font-family:'Courier New',monospace;"></pre>
+          </div>
+        </div>`;
+
+      attachTagListeners('solo');
+      updateSoloPreview();
+    }
+
+    function renderTagSection(label, key, selectedTags, stateKey) {
+      if (!allTags) return '';
+      const tags = allTags[key] || [];
+      const pills = tags.map(tag => {
+        const active = selectedTags.includes(tag);
+        return `<button type="button"
+          data-tag="${esc(tag)}" data-key="${stateKey}"
+          class="tag-pill px-2 py-1 text-xs rounded-full border transition-colors ${active
+            ? 'bg-indigo-600 text-white border-indigo-600'
+            : 'bg-white text-gray-600 border-gray-200 hover:border-indigo-400'}"
+        >${esc(tag)}</button>`;
+      }).join('');
+      return `
+        <div>
+          <label class="text-xs text-gray-500 block mb-1">${label}</label>
+          <div class="flex flex-wrap gap-1.5">${pills}</div>
+        </div>`;
+    }
+
+    function attachTagListeners(mode) {
+      document.querySelectorAll('.tag-pill').forEach(btn => {
+        btn.addEventListener('click', () => {
+          const tag = btn.dataset.tag;
+          const key = btn.dataset.key;
+          if (mode === 'solo') {
+            const idx = soloState[key].indexOf(tag);
+            if (idx === -1) soloState[key].push(tag);
+            else soloState[key].splice(idx, 1);
+            renderSoloPanel(collectCharacters()[window.activeSoloIndex]);
+          } else {
+            const idx = groupState[key].indexOf(tag);
+            if (idx === -1) groupState[key].push(tag);
+            else groupState[key].splice(idx, 1);
+            renderGroupPanel();
+          }
+        });
+      });
+    }
+
+    function buildSoloPromptText() {
+      const parts = [soloState.description.trim()];
+      if (soloState.extraNotes.trim()) parts.push(soloState.extraNotes.trim());
+      [...soloState.styleTags, ...soloState.poseTags,
+       ...soloState.elementTags, ...soloState.themeTags].forEach(t => parts.push(t));
+      const cp = parts.filter(Boolean).join(', ');
+      return PROMPT_TEMPLATE.replace('{cp}', cp);
+    }
+
+    function updateSoloPreview() {
+      const el = document.getElementById('pb-preview');
+      if (el) el.textContent = buildSoloPromptText();
+    }
+
+    function applySoloPrompt() {
+      if (window.activeSoloIndex === null) return;
+      const prompt = buildSoloPromptText();
+      const rows = document.querySelectorAll('#characters-tbody tr');
+      const row = rows[window.activeSoloIndex];
+      if (row) {
+        row.querySelector('[data-field="prompt"]').value = prompt;
+      }
+      showToast('✅ Prompt appliqué au personnage');
+    }
+
+    function openGroupBuilder() {
+      builderMode = 'group';
+      window.activeSoloIndex = null;
+      groupState = { charDescs: {}, charIds: [], styleTags: [], elementTags: [], themeTags: [], groupDynamic: '', extraNotes: '' };
+      const chars = collectCharacters();
+      renderCharacters(chars);
+      renderGroupPanel();
+    }
+
+    function renderGroupPanel() {
+      document.getElementById('pb-empty').classList.add('hidden');
+      document.getElementById('pb-solo').classList.add('hidden');
+      const panel = document.getElementById('pb-group');
+      panel.classList.remove('hidden');
+
+      const chars = collectCharacters();
+
+      const charCheckboxes = chars.map(c => {
+        const checked = groupState.charIds.includes(c.id);
+        const descVal = groupState.charDescs[c.id] || '';
+        return `
+          <div class="border border-gray-100 rounded-lg p-3 space-y-2">
+            <label class="flex items-center gap-2 cursor-pointer">
+              <input type="checkbox" value="${esc(c.id)}" ${checked ? 'checked' : ''}
+                onchange="toggleGroupChar('${esc(c.id)}', this.checked)"
+                class="rounded text-indigo-600" />
+              <span class="text-xs font-medium">${esc(c.name || c.id)}</span>
+              <span class="text-xs text-gray-400">${esc(c.id)}</span>
+            </label>
+            ${checked ? `<textarea rows="2" placeholder="Description physique pour cette page..."
+              class="w-full border border-gray-200 rounded px-2 py-1 text-xs resize-none focus:outline-none focus:ring-1 focus:ring-indigo-400"
+              oninput="groupState.charDescs['${esc(c.id)}']=this.value; updateGroupPreview()"
+            >${esc(descVal)}</textarea>` : ''}
+          </div>`;
+      }).join('');
+
+      const dynamicPills = (allTags?.group_dynamics || []).map(d => {
+        const active = groupState.groupDynamic === d;
+        return `<button type="button"
+          onclick="groupState.groupDynamic = groupState.groupDynamic === '${esc(d)}' ? '' : '${esc(d)}'; renderGroupPanel()"
+          class="px-2 py-1 text-xs rounded-full border transition-colors ${active
+            ? 'bg-indigo-600 text-white border-indigo-600'
+            : 'bg-white text-gray-600 border-gray-200 hover:border-indigo-400'}"
+        >${esc(d)}</button>`;
+      }).join('');
+
+      panel.innerHTML = `
+        <div class="px-5 py-4 border-b border-gray-100 flex items-center justify-between">
+          <p class="font-semibold text-sm">Page de groupe</p>
+          <button onclick="addGroupToSequence()"
+            class="text-xs bg-green-600 text-white rounded-lg px-4 py-2 hover:bg-green-700">
+            + Ajouter à PAGE_SEQUENCE
+          </button>
+        </div>
+        <div class="p-5 space-y-4">
+          <div>
+            <label class="text-xs text-gray-500 block mb-2">Personnages <span class="text-gray-400">(sélectionner 2+)</span></label>
+            <div class="space-y-2">${charCheckboxes}</div>
+          </div>
+          <div>
+            <label class="text-xs text-gray-500 block mb-1">Dynamique de groupe</label>
+            <div class="flex flex-wrap gap-1.5">${dynamicPills}</div>
+          </div>
+          ${renderTagSection('Style', 'style', groupState.styleTags, 'styleTags')}
+          ${renderTagSection('Éléments', 'elements', groupState.elementTags, 'elementTags')}
+          ${renderTagSection('Thème', 'theme', groupState.themeTags, 'themeTags')}
+          <div>
+            <label class="text-xs text-gray-500 block mb-1">Notes supplémentaires</label>
+            <textarea id="pb-group-extra" rows="2"
+              class="w-full border border-gray-200 rounded-lg px-3 py-2 text-xs resize-y focus:outline-none focus:ring-2 focus:ring-indigo-500"
+              oninput="groupState.extraNotes=this.value; updateGroupPreview()">${esc(groupState.extraNotes)}</textarea>
+          </div>
+          <div class="bg-gray-50 border border-gray-200 rounded-lg px-3 py-2 text-xs text-gray-500 flex items-center gap-2">
+            ⛔ <span>Zero shading · Zero gray fills · Zero gradients · Zero black fills</span>
+          </div>
+          <div>
+            <label class="text-xs text-gray-500 block mb-1">Aperçu du prompt</label>
+            <pre id="pb-group-preview" class="bg-gray-900 text-green-400 text-xs rounded-lg p-3 whitespace-pre-wrap break-words" style="max-height:160px;overflow-y:auto;font-family:'Courier New',monospace;"></pre>
+          </div>
+        </div>`;
+
+      attachTagListeners('group');
+      updateGroupPreview();
+    }
+
+    function toggleGroupChar(id, checked) {
+      if (checked) {
+        if (!groupState.charIds.includes(id)) groupState.charIds.push(id);
+      } else {
+        groupState.charIds = groupState.charIds.filter(i => i !== id);
+        delete groupState.charDescs[id];
+      }
+      renderGroupPanel();
+    }
+
+    function buildGroupPromptText() {
+      const descs = groupState.charIds
+        .map(id => (groupState.charDescs[id] || '').trim())
+        .filter(Boolean);
+      if (descs.length === 0) return '(sélectionne des personnages avec descriptions)';
+      const desc = descs.join(' alongside ');
+      const parts = [desc];
+      if (groupState.extraNotes.trim()) parts.push(groupState.extraNotes.trim());
+      if (groupState.groupDynamic) parts.push(groupState.groupDynamic);
+      [...groupState.styleTags, ...groupState.elementTags, ...groupState.themeTags].forEach(t => parts.push(t));
+      const cp = parts.filter(Boolean).join(', ');
+      return PROMPT_TEMPLATE.replace('{cp}', cp);
+    }
+
+    function updateGroupPreview() {
+      const el = document.getElementById('pb-group-preview');
+      if (el) el.textContent = buildGroupPromptText();
+    }
+
+    function addGroupToSequence() {
+      if (groupState.charIds.length < 2) {
+        showToast('❌ Sélectionne au moins 2 personnages');
+        return;
+      }
+      const prompt = buildGroupPromptText();
+      if (prompt.startsWith('(sélectionne')) {
+        showToast('❌ Ajoute une description pour chaque personnage sélectionné');
+        return;
+      }
+      const ids = groupState.charIds.join('_');
+      const groupId = `group_${ids}`;
+      const chars = collectCharacters();
+      const names = groupState.charIds.map(id => {
+        const c = chars.find(ch => ch.id === id);
+        return c ? (c.name || c.id) : id;
+      });
+      const label = names.join(' + ');
+      let sanitizedBookName = BOOK_NAME;
+      if (typeof sanitizedBookName === 'string') {
+          sanitizedBookName = sanitizedBookName.replace(/-/g, '');
+      }
+      const filename = `${sanitizedBookName}_${groupId}.png`;
+
+      // Ajouter dans CHARACTERS
+      chars.push({ id: groupId, name: `Groupe: ${label}`, series: '', prompt });
+      renderCharacters(chars);
+
+      // Ajouter dans PAGE_SEQUENCE
+      const seq = collectSequence();
+      seq.push({ file: filename, label });
+      renderSequence(seq);
+
+      showToast(`✅ Page de groupe "${label}" ajoutée`);
+      openGroupBuilder();
+    }
+
+    function switchTab(tab) {
+      document.getElementById('panel-status').classList.toggle('hidden', tab !== 'status');
+      document.getElementById('panel-config').classList.toggle('hidden', tab !== 'config');
+      document.getElementById('tab-status').className =
+        tab === 'status'
+          ? 'py-3 border-b-2 border-gray-900 font-medium text-gray-900'
+          : 'py-3 border-b-2 border-transparent font-medium text-gray-500 hover:text-gray-700 blur-0';
+      document.getElementById('tab-config').className =
+        tab === 'config'
+          ? 'py-3 border-b-2 border-gray-900 font-medium text-gray-900'
+          : 'py-3 border-b-2 border-transparent font-medium text-gray-500 hover:text-gray-700 blur-0';
+      if (tab === 'config') {
+          if(!configData) loadConfig();
+      }
+    }
+
+    async function loadConfig() {
+      const res = await fetch(`/api/book/${BOOK_NAME}/config`);
+      configData = await res.json();
+      document.getElementById('cfg-title').value    = configData.title;
+      document.getElementById('cfg-subtitle').value = configData.subtitle;
+      document.getElementById('cfg-author').value   = configData.author;
+      renderCharacters(configData.characters);
+      renderSequence(configData.page_sequence);
+      if (!allTags) {
+        const tagRes = await fetch('/api/prompt/tags');
+        allTags = await tagRes.json();
+      }
+    }
+
+    function renderCharacters(characters) {
+      const tbody = document.getElementById('characters-tbody');
+      tbody.innerHTML = '';
+      characters.forEach((c, i) => tbody.appendChild(makeCharRow(c, i)));
+      document.getElementById('char-count').textContent = `(${characters.length})`;
+    }
+
+    function makeCharRow(c, i) {
+      const tr = document.createElement('tr');
+      tr.className = 'hover:bg-gray-50 cursor-pointer' + (window.activeSoloIndex === i ? ' bg-indigo-50' : '');
+      tr.dataset.index = i;
+      tr.onclick = () => typeof selectCharacter === 'function' ? selectCharacter(i) : null;
+      tr.innerHTML = `
+        <td class="px-3 py-2">
+          <input type="text" value="${esc(c.id)}" placeholder="gojo"
+                 class="w-full border border-gray-200 rounded px-2 py-1 text-xs font-mono focus:outline-none focus:ring-1 focus:ring-indigo-400"
+                 data-field="id" onclick="event.stopPropagation()" />
+        </td>
+        <td class="px-3 py-2">
+          <input type="text" value="${esc(c.name)}" placeholder="The Hero"
+                 class="w-full border border-gray-200 rounded px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-indigo-400"
+                 data-field="name" onclick="event.stopPropagation()" />
+          <input type="hidden" value="${esc(c.series)}" data-field="series" />
+          <input type="hidden" value="${esc(c.prompt)}" data-field="prompt" />
+        </td>
+        <td class="px-3 py-2 text-center whitespace-nowrap">
+          <button onclick="event.stopPropagation(); moveChar(${i}, -1)" class="text-gray-400 hover:text-gray-700 px-1">↑</button>
+          <button onclick="event.stopPropagation(); moveChar(${i},  1)" class="text-gray-400 hover:text-gray-700 px-1">↓</button>
+        </td>
+        <td class="px-3 py-2 text-center">
+          <button onclick="event.stopPropagation(); deleteChar(${i})" class="text-red-400 hover:text-red-600 text-xs">🗑</button>
+        </td>`;
+      return tr;
+    }
+
+    function collectCharacters() {
+      const rows = document.querySelectorAll('#characters-tbody tr');
+      return Array.from(rows).map(tr => ({
+        id:     tr.querySelector('[data-field="id"]').value.trim(),
+        name:   tr.querySelector('[data-field="name"]').value.trim(),
+        series: tr.querySelector('[data-field="series"]').value.trim(),
+        prompt: tr.querySelector('[data-field="prompt"]').value.trim(),
+      }));
+    }
+
+    function addCharacterRow() {
+      const chars = collectCharacters();
+      chars.push({ id: '', name: '', series: '', prompt: '' });
+      renderCharacters(chars);
+    }
+
+    function deleteChar(i) {
+      const chars = collectCharacters();
+      chars.splice(i, 1);
+      renderCharacters(chars);
+    }
+
+    function moveChar(i, dir) {
+      const chars = collectCharacters();
+      const j = i + dir;
+      if (j < 0 || j >= chars.length) return;
+      [chars[i], chars[j]] = [chars[j], chars[i]];
+      renderCharacters(chars);
+    }
+
+    function renderSequence(sequence) {
+      const list = document.getElementById('sequence-list');
+      list.innerHTML = '';
+      sequence.forEach((entry, i) => {
+        const div = document.createElement('div');
+        div.className = 'flex items-center gap-3 px-4 py-2 hover:bg-gray-50';
+        div.dataset.index = i;
+        div.innerHTML = `
+          <span class="text-xs text-gray-400 w-5">${i + 1}</span>
+          <span class="font-mono text-xs text-gray-600 w-48 truncate" data-seq-file>${esc(entry.file)}</span>
+          <input type="text" value="${esc(entry.label)}"
+                 class="flex-1 border border-gray-200 rounded px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-indigo-400"
+                 data-seq-label />
+          <div class="flex gap-1">
+            <button onclick="moveSeq(${i}, -1)" class="text-gray-400 hover:text-gray-700 text-xs px-1">↑</button>
+            <button onclick="moveSeq(${i},  1)" class="text-gray-400 hover:text-gray-700 text-xs px-1">↓</button>
+            <button onclick="deleteSeq(${i})" class="text-red-400 hover:text-red-600 text-xs px-1">🗑</button>
+          </div>`;
+        list.appendChild(div);
+      });
+      document.getElementById('seq-count').textContent = `(${sequence.length} pages)`;
+    }
+
+    function collectSequence() {
+      const files  = Array.from(document.querySelectorAll('[data-seq-file]')).map(el => el.textContent.trim());
+      const labels = Array.from(document.querySelectorAll('[data-seq-label]')).map(el => el.value.trim());
+      return files.map((file, i) => ({ file, label: labels[i] }));
+    }
+
+    function moveSeq(i, dir) {
+      const seq = collectSequence();
+      const j = i + dir;
+      if (j < 0 || j >= seq.length) return;
+      [seq[i], seq[j]] = [seq[j], seq[i]];
+      renderSequence(seq);
+    }
+
+    function deleteSeq(i) {
+      const seq = collectSequence();
+      seq.splice(i, 1);
+      renderSequence(seq);
+    }
+
+    async function saveConfig(bookName) {
+      const payload = {
+        title:         document.getElementById('cfg-title').value.trim(),
+        subtitle:      document.getElementById('cfg-subtitle').value.trim(),
+        author:        document.getElementById('cfg-author').value.trim(),
+        testpen:       configData.testpen,
+        images_folder: configData.images_folder,
+        characters:    collectCharacters(),
+        page_sequence: collectSequence(),
+      };
+      const res = await fetch(`/api/book/${bookName}/config`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+      if (res.ok) {
+        configData = null;
+        showToast('✅ Config sauvegardée');
+      } else {
+        showToast('❌ Erreur lors de la sauvegarde');
+      }
+    }
+
+    function showToast(msg) {
+      const t = document.getElementById('toast');
+      t.textContent = msg;
+      t.classList.remove('hidden');
+      setTimeout(() => t.classList.add('hidden'), 3000);
+    }
+
+    let activeSource = null;
+
+    function runAction(action, bookName) {
+      const urls = {
+        generate: `/stream/generate/${bookName}`,
+        clean:    `/stream/clean/${bookName}`,
+        assemble: `/stream/assemble/${bookName}`,
+      };
+      const titles = {
+        generate: `🤖 Generating images — ${bookName}`,
+        clean:    `🧹 Cleaning images — ${bookName}`,
+        assemble: `⚙️ Assembling PDF — ${bookName}`,
+      };
+      startStream(urls[action], titles[action]);
+    }
+
+    function cleanFile(bookName, filename) {
+      startStream(`/stream/clean/${bookName}?filename=${encodeURIComponent(filename)}`,
+                  `🧹 Cleaning ${filename}`);
+    }
+
+    function regenerate(bookName, filename) {
+      const charId = filename.replace(/^book\d+_/, '').replace('.png', '');
+      startStream(`/stream/generate/${bookName}?char_id=${charId}`,
+                  `🔄 Regenerating ${filename}`);
+    }
+
+    function startStream(url, title) {
+      const wrapper = document.getElementById('console-wrapper');
+      const output  = document.getElementById('console-output');
+      const titleEl = document.getElementById('console-title');
+      wrapper.classList.remove('hidden');
+      output.textContent = '';
+      titleEl.textContent = title;
+      wrapper.scrollIntoView({ behavior: 'smooth' });
+      if (activeSource) activeSource.close();
+      activeSource = new EventSource(url);
+      activeSource.onmessage = (e) => {
+        if (e.data === '[DONE]') {
+          activeSource.close();
+          output.textContent += '\\n✅ Complete\\n';
+          setTimeout(() => location.reload(), 1500);
+        } else {
+          output.textContent += e.data + '\\n';
+        }
+        output.scrollTop = output.scrollHeight;
+      };
+      activeSource.onerror = () => {
+        output.textContent += '\\n[Connection error]\\n';
+        activeSource.close();
+      };
+    }
+
+    function closeConsole() {
+      if (activeSource) { activeSource.close(); activeSource = null; }
+      document.getElementById('console-wrapper').classList.add('hidden');
+    }
+
+    function esc(s) {
+      if (s == null) return '';
+      return String(s)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+    }
+"""
+
+new_text = text[:start_idx+8] + "\n" + original_script + "\n  " + text[end_idx:]
+# NOTE: let builderMode intentionally injected with a syntax bug? No wait!
+new_text = new_text.replace("let builderMode", "let builderMode")
+
+with open('dashboard/templates/book.html', 'w', encoding='utf-8') as f:
+    f.write(new_text)
+
+print("HTML script block completely overwritten cleanly.")
+</script>
+</body>
+</html>
+<!-- Import Image Modal -->
+  <div id="import-image-modal" class="hidden fixed inset-0 bg-gray-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-6">
+    <div class="bg-white w-full max-w-3xl max-h-[80vh] rounded-2xl shadow-2xl flex flex-col">
+      <div class="p-6 border-b border-gray-100 flex justify-between items-center shrink-0">
+        <h2 class="text-xl font-bold font-header text-gray-800">Importer une image existante</h2>
+        <button onclick="closeImportModal()" class="text-gray-400 hover:text-gray-900 text-xl font-bold leading-none">✕</button>
+      </div>
+      
+      <div class="flex flex-1 min-h-0 overflow-hidden">
+        <!-- Sidebar: Book List -->
+        <div class="w-1/3 border-r border-gray-100 overflow-y-auto bg-gray-50 p-4 shrink-0">
+          <h3 class="text-xs font-bold text-gray-500 uppercase mb-3">Sélectionner le dossier</h3>
+          <div id="import-books-list" class="space-y-1">
+             <div class="text-xs text-gray-400 italic">Chargement...</div>
+          </div>
+        </div>
+        
+        <!-- Main: Image Grid -->
+        <div class="w-2/3 overflow-y-auto p-4 shrink-0 relative bg-white">
+          <h3 class="text-xs font-bold text-gray-500 uppercase mb-3">Images disponibles</h3>
+          <div id="import-images-grid" class="grid grid-cols-3 gap-3">
+             <div class="text-xs text-gray-400 italic">Sélectionne un dossier à gauche</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>

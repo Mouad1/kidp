@@ -15,3 +15,9 @@ def test_category_tags_has_all_categories():
 def test_category_tags_nonempty():
     for cat, tags in CATEGORY_TAGS.items():
         assert len(tags) > 0, f"Category {cat!r} is empty"
+
+
+def test_refine_prompt_script_exists():
+    """Script must be importable and have a run() function."""
+    from pipeline import refine_prompt
+    assert callable(refine_prompt.run)

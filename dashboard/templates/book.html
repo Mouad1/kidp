@@ -606,21 +606,58 @@
       list.innerHTML = '';
       sequence.forEach((entry, i) => {
         const div = document.createElement('div');
-        div.className = 'flex items-center gap-2 px-2 py-1.5 hover:bg-gray-50 rounded-lg';
+        div.className = 'px-2 py-1.5 hover:bg-gray-50 rounded-lg bg-white border border-gray-100';
         div.dataset.index = i;
+
+        // Extract char_id from filename (e.g. "book2_gojo.png" → "gojo")
+        const charId = entry.file.replace(/^[^_]+_/, '').replace(/\.png$/i, '');
+        div.dataset.charId = charId;
+
+        // Look up current prompt from configData characters
+        const charData = configData?.characters?.find(c => c.id === charId);
+        div.dataset.currentPrompt = charData?.prompt || '';
+
         div.innerHTML = `
-          <span class="text-xs text-gray-400 w-4 shrink-0">${i + 1}</span>
-          <img src="/images/${BOOK_NAME}/${esc(entry.file)}"
-               class="w-8 h-10 object-cover rounded border border-gray-200 shrink-0 bg-gray-100"
-               onerror="this.style.opacity='0.2'" loading="lazy" />
-          <span class="font-mono text-xs text-gray-500 w-28 truncate shrink-0" data-seq-file>${esc(entry.file)}</span>
-          <input type="text" value="${esc(entry.label)}"
-                 class="flex-1 min-w-0 border border-gray-200 rounded px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-indigo-400"
-                 data-seq-label />
-          <div class="flex gap-0.5 shrink-0">
-            <button onclick="moveSeq(${i}, -1)" class="text-gray-400 hover:text-gray-700 text-xs px-1">↑</button>
-            <button onclick="moveSeq(${i},  1)" class="text-gray-400 hover:text-gray-700 text-xs px-1">↓</button>
-            <button onclick="deleteSeq(${i})" class="text-red-400 hover:text-red-600 text-xs px-1">🗑</button>
+          <div class="flex items-center gap-2">
+            <span class="text-xs text-gray-400 w-4 shrink-0">${i + 1}</span>
+            <img src="/images/${BOOK_NAME}/${esc(entry.file)}"
+                 class="w-8 h-10 object-cover rounded border border-gray-200 shrink-0 bg-gray-100"
+                 onerror="this.style.opacity='0.2'" loading="lazy" />
+            <span class="font-mono text-xs text-gray-500 w-28 truncate shrink-0" data-seq-file>${esc(entry.file)}</span>
+            <input type="text" value="${esc(entry.label)}"
+                   class="flex-1 min-w-0 border border-gray-200 rounded px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-indigo-400"
+                   data-seq-label />
+            <div class="flex gap-0.5 shrink-0">
+              <button onclick="moveSeq(${i}, -1)" class="text-gray-400 hover:text-gray-700 text-xs px-1">↑</button>
+              <button onclick="moveSeq(${i},  1)" class="text-gray-400 hover:text-gray-700 text-xs px-1">↓</button>
+              <button onclick="deleteSeq(${i})" class="text-red-400 hover:text-red-600 text-xs px-1">🗑</button>
+            </div>
+          </div>
+          <div class="feedback-section mt-2 border-t border-gray-100 pt-2">
+            <button class="text-xs text-gray-400 hover:text-gray-600 flex items-center gap-1"
+                    onclick="toggleFeedback(this)">
+              ▸ Améliorer ce prompt
+            </button>
+            <div class="feedback-body hidden mt-2 space-y-2">
+              <textarea rows="2"
+                        class="feedback-input w-full text-xs border border-gray-200 rounded-lg p-2 resize-none"
+                        placeholder="ex: trop noir, pose trop statique, simplifie l'arrière-plan"></textarea>
+              <button class="analyse-btn w-full text-xs bg-indigo-50 text-indigo-700 border border-indigo-200 rounded-lg px-3 py-1.5 hover:bg-indigo-100"
+                      onclick="analyseFeedback(this)">
+                🔄 Analyser le feedback
+              </button>
+              <div class="diff-panel hidden space-y-2">
+                <ul class="changes-list text-xs text-gray-600 space-y-1"></ul>
+                <details class="text-xs">
+                  <summary class="cursor-pointer text-gray-400 hover:text-gray-600">Voir prompt complet</summary>
+                  <pre class="refined-prompt-text mt-1 whitespace-pre-wrap text-gray-500 text-xs bg-gray-50 p-2 rounded"></pre>
+                </details>
+                <button class="apply-btn w-full text-xs bg-green-600 text-white rounded-lg px-3 py-1.5 hover:bg-green-700"
+                        onclick="applyFeedback(this)">
+                  ✅ Appliquer &amp; Régénérer
+                </button>
+              </div>
+            </div>
           </div>`;
         list.appendChild(div);
       });
@@ -798,6 +835,109 @@
         .replace(/>/g, '&gt;')
         .replace(/"/g, '&quot;')
         .replace(/'/g, '&#39;');
+    }
+
+    // ── Feedback loop ───────────────────────────────────────────────────────────
+
+    function toggleFeedback(btn) {
+      const body = btn.nextElementSibling;
+      const open = !body.classList.contains('hidden');
+      body.classList.toggle('hidden', open);
+      btn.textContent = open ? '▸ Améliorer ce prompt' : '▾ Améliorer ce prompt';
+    }
+
+    async function analyseFeedback(btn) {
+      const card        = btn.closest('[data-char-id]');
+      const pageRef     = card?.dataset.charId || '';
+      const body        = btn.closest('.feedback-body');
+      const feedback    = body.querySelector('.feedback-input').value.trim();
+      const currentPrompt = card?.dataset.currentPrompt || '';
+
+      if (!feedback) { showToast('Écris un feedback d\'abord'); return; }
+      if (!currentPrompt) { showToast('Prompt introuvable pour ce personnage'); return; }
+
+      btn.disabled = true;
+      btn.textContent = '⏳ Analyse...';
+
+      try {
+        const res = await fetch(`/api/feedback/${BOOK_NAME}`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ feedback, current_prompt: currentPrompt, page_ref: pageRef }),
+        });
+        if (!res.ok) {
+          const err = await res.json().catch(() => ({}));
+          showToast('Erreur: ' + (err.detail || res.status));
+          return;
+        }
+        const data = await res.json();
+
+        const diffPanel   = body.querySelector('.diff-panel');
+        const changesList = body.querySelector('.changes-list');
+        const refinedText = body.querySelector('.refined-prompt-text');
+
+        changesList.innerHTML = data.changes.map(c =>
+          `<li class="flex gap-1"><span class="text-yellow-600">→</span>${esc(c)}</li>`
+        ).join('');
+        refinedText.textContent = data.refined_prompt;
+        diffPanel.dataset.refinedPrompt = data.refined_prompt;
+        diffPanel.classList.remove('hidden');
+
+      } finally {
+        btn.disabled = false;
+        btn.textContent = '🔄 Analyser le feedback';
+      }
+    }
+
+    async function applyFeedback(btn) {
+      const card      = btn.closest('[data-char-id]');
+      const charId    = card?.dataset.charId || '';
+      const fileEl    = card?.querySelector('[data-seq-file]');
+      const filename  = fileEl ? fileEl.textContent.trim() : '';
+      const diffPanel = btn.closest('.diff-panel');
+      const refined   = diffPanel.dataset.refinedPrompt;
+      if (!refined) { showToast('Aucun prompt raffiné trouvé'); return; }
+
+      // Update the hidden prompt field for this character in the character table
+      const charRows = document.querySelectorAll('#characters-tbody tr');
+      for (const tr of charRows) {
+        const idField = tr.querySelector('[data-field="id"]');
+        if (idField && idField.value.trim() === charId) {
+          const promptField = tr.querySelector('[data-field="prompt"]');
+          if (promptField) promptField.value = refined;
+          break;
+        }
+      }
+
+      // Keep the card's data attribute in sync for future feedback sessions
+      if (card) card.dataset.currentPrompt = refined;
+
+      // Save config to backend (cfg-title/subtitle/author don't exist in this view,
+      // fall back to configData values which were loaded on init)
+      const payload = {
+        title:         configData?.title || '',
+        subtitle:      configData?.subtitle || '',
+        author:        configData?.author || '',
+        testpen:       configData?.testpen,
+        images_folder: configData?.images_folder,
+        characters:    collectCharacters(),
+        page_sequence: collectSequence(),
+      };
+      const saveRes = await fetch(`/api/book/${BOOK_NAME}/config`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+      if (!saveRes.ok) {
+        showToast('❌ Erreur lors de la sauvegarde du prompt');
+        return;
+      }
+
+      // Trigger regeneration for this specific file
+      if (filename) {
+        regenerate(BOOK_NAME, filename);
+      }
+      showToast('Prompt mis à jour — génération lancée');
     }
 
     // ── Init ────────────────────────────────────────────────────────────────────

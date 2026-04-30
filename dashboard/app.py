@@ -399,12 +399,16 @@ async def stream_cleanup(book_name: str, char_id: str = "", mode: str = "auto"):
 @app.get("/stream/assemble/{book_name}")
 
 @app.get("/stream/cover/{book_name}")
-async def stream_cover(book_name: str):
+async def stream_cover(book_name: str, custom_prompt: str | None = None):
     """Stream real-time output of pipeline/cover.py"""
     import subprocess
     import asyncio
+    if not re.match(r'^[a-z0-9][a-z0-9-]*[a-z0-9]$', book_name):
+        raise HTTPException(status_code=400, detail="Invalid book name")
     cmd = [sys.executable, str(ROOT / "pipeline" / "cover.py"), "--book", book_name]
-    
+    if custom_prompt:
+        cmd += ["--prompt-override", custom_prompt]
+
     async def event_stream():
         try:
             process = await asyncio.create_subprocess_exec(
@@ -420,7 +424,7 @@ async def stream_cover(book_name: str):
                     break
                 line_str = line.decode('utf-8', errors='replace').rstrip()
                 yield f"data: {line_str}\n\n"
-            
+
             await process.wait()
             yield f"data: [DONE]\n\n"
         except Exception as e:
@@ -430,9 +434,11 @@ async def stream_cover(book_name: str):
     return StreamingResponse(event_stream(), media_type="text/event-stream")
 
 @app.get("/stream/assemble/{book_name}")
-async def stream_assemble(book_name: str):
+async def stream_assemble(book_name: str, output: str | None = None):
     """Stream real-time output of pipeline/assemble.py"""
     cmd = [sys.executable, str(ROOT / "pipeline" / "assemble.py"), "--book", book_name]
+    if output:
+        cmd += ["--output", output]
 
     async def event_stream():
         try:
@@ -531,6 +537,19 @@ async def api_get_book_config(book_name: str):
         return read_config(book_name)
     except FileNotFoundError:
         raise HTTPException(status_code=404, detail=f"Livre {book_name!r} introuvable")
+
+
+@app.get("/api/book/{book_name}/cover-prompt")
+async def api_get_cover_prompt(book_name: str):
+    """Return the auto-generated cover prompt for the given book."""
+    from pipeline.cover import _build_cover_prompt
+    from pipeline.assemble import load_config as _lc
+    try:
+        cfg = _lc(book_name)
+    except Exception:
+        raise HTTPException(status_code=404, detail=f"Livre {book_name!r} introuvable")
+    prompt = _build_cover_prompt(cfg)
+    return {"prompt": prompt}
 
 
 @app.put("/api/book/{book_name}/config")
@@ -641,6 +660,31 @@ async def serve_image(book_name: str, filename: str):
     if not image_path.exists():
         raise HTTPException(status_code=404, detail="Image not found")
     return FileResponse(str(image_path), media_type="image/png")
+
+
+@app.get("/api/choose-folder")
+async def api_choose_folder():
+    """Open a native macOS folder picker dialog and return the chosen path."""
+    import platform
+    import asyncio
+    system = platform.system()
+    if system != "Darwin":
+        raise HTTPException(status_code=400, detail="Native folder picker only supported on macOS")
+    try:
+        proc = await asyncio.create_subprocess_exec(
+            "osascript", "-e",
+            'POSIX path of (choose folder with prompt "Choisir le dossier de destination pour le PDF")',
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
+        )
+        stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=120)
+        if proc.returncode != 0:
+            # User cancelled (return code 1) or error
+            return {"path": None, "cancelled": True}
+        path = stdout.decode().strip().rstrip("/")
+        return {"path": path, "cancelled": False}
+    except asyncio.TimeoutError:
+        return {"path": None, "cancelled": True}
 
 
 @app.get("/api/book/{book_name}/open-pdf")
@@ -825,11 +869,26 @@ async def api_generate_meta(req: GenerateMetaRequest):
 
     try:
         client = genai.Client(api_key=os.environ.get("GEMINI_API_KEY")) if os.environ.get("GEMINI_API_KEY") else genai.Client()
-        response = client.models.generate_content(
-            model="gemini-2.5-flash",
-            contents=prompt,
-        )
-        return {"result": response.text.strip()}
+        models_to_try = ["gemini-2.5-flash", "gemini-2.5-flash-lite"]
+        last_exc = None
+        for model_name in models_to_try:
+            try:
+                response = client.models.generate_content(
+                    model=model_name,
+                    contents=prompt,
+                )
+                return {"result": response.text.strip()}
+            except Exception as model_exc:
+                err_str = str(model_exc)
+                if "503" in err_str or "UNAVAILABLE" in err_str:
+                    last_exc = model_exc
+                    continue
+                raise
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=str(last_exc))
+    except HTTPException:
+        raise
     except Exception as e:
         import traceback
         traceback.print_exc()

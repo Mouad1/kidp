@@ -1,5 +1,5 @@
-# Output PDFs (large binary files — regenerate with pipeline/assemble.py)
-output/*.pdf
+# Output PDFs and generated assets
+output/
 
 # Python
 __pycache__/
@@ -16,4 +16,16 @@ __pycache__/
 # Excel / spreadsheet exports (tracked separately if needed)
 *.xlsx
 *.csv
+
+# Secrets & runtime config
 .env.local
+settings.json
+
+# Node
+node_modules/
+
+# Large generated images (regenerate with pipeline/generate.py)
+images/
+
+# Backup files
+*.bak

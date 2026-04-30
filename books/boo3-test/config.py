@@ -17,8 +17,8 @@ LANGUAGES      = ["fr", "en", "ar"]
 TITLE          = "Baba inouva & Joudia"
 SUBTITLE       = ""
 AUTHOR         = "Marco Belghiti"
-INTRO_TEXT     = ""
-VALUES_LEARNED = ""
+INTRO_TEXT     = "Au cœur des montagnes, Joudia, une petite fille courageuse, veille sur les siens. Face au danger et à un code perdu, découvrez comment l'amour véritable peut éclairer la nuit la plus sombre."
+VALUES_LEARNED = "L'amour et les liens familiaux sincères sont plus précieux que tous les trésors du monde. La confiance et le partage des secrets du cœur sont les meilleurs remparts contre les peurs."
 
 # ── Paths ──────────────────────────────────────────────────────────────────────
 
@@ -27,7 +27,7 @@ TESTPEN    = ""
 
 # ── Story settings ────────────────────────────────────────────────────────────
 
-STORY_BASE_PROMPT = "Prompt de base pour cette histoire de Baba Inouva et Joudia."
+STORY_BASE_PROMPT = "Children's storybook illustration in a warm, textured gouache and watercolor style with a tactile paper texture. The art style is semi-realistic with soft character designs — NOT flat vector. Illustrations have gentle gradients, atmospheric depth, and a cozy quality appropriate for young children aged 4–8.\n\nSETTING: A traditional Amazigh/Berber mountain village in the Atlas Mountains of Morocco. Architecture is rustic terracotta and ocher adobe mud-brick houses stacked on a rocky hillside, with carved wooden doors, small arched windows, clay pots, and colorful hanging fabrics. The mountain backdrop shows rugged stone peaks. Vegetation is sparse — a few palm trees, green shrubs, and potted plants.\n\nCOLOR PALETTE: Warm amber, terracotta, and ocher for buildings and earth. Dusty azure sky transitioning to warm golden and peachy horizon tones. Muted sage greens for foliage. Deep warm brown and purple shadows. Glowing warm golden light from lanterns and firelight.\n\nFIXED CHARACTERS — use these descriptions consistently across all illustrations:\n\n1. JOUDIA: A brave girl of about 8–10 years old. Long black hair in a single braid. She wears a rust/terracotta short-sleeved tunic dress, and traditional sandals. She wears distinctive heavy traditional silver bracelets on her wrists (key story element). Face is warm and expressive.\n\n2. BABA INOUVA: An elderly man, Joudia's father figure. Generous white beard, kind eyes. He wears a traditional brown hooded djellaba and a small brown taguiya (knitted skull cap). Gentle, wise demeanor.\n\n3. THE SHADOW MONSTER (L'Afarit): A stylized dark navy-blue shadowy creature — mischievous and eerie, not terrifying. Glowing red or amber eyes, wispy shifting form, always lurking in shadows or doorways.\n\n4. THE TWO LITTLE BROTHERS: Two young boys aged 4–6, curly dark hair, simple light-colored tunics. Joudia's younger siblings, appear as background characters.\n\nILLUSTRATION SPECS: Square format (1:1). Warm cream/white paper background with soft rounded-corner border effect as if on a storybook page. No text, watermarks, or captions embedded in the image."
 
 # ── Story Pages ───────────────────────────────────────────────────────────────
 
@@ -156,7 +156,7 @@ PAGES = [
         "page_number":  21,
         "text":         {"fr": "Joudia se souvint. Elle murmura doucement à travers la porte : « Tu m'appelles 'Ma petite fleur des montagnes', papa. Car tu dis que je suis forte comme une fleur qui pousse entre deux pierres. »", "en": "Joudia remembered. She whispered softly through the door: \"You call me 'My little mountain flower', Papa. Because you say I am strong like a flower that grows between two stones.\"", "es": "Joudia recordó. Susurró suavemente a través de la puerta: \"Me llamas 'Mi pequeña flor de la montaña', papá. Porque dices que soy fuerte como una flor que crece entre dos piedras.\"", "ar": "تذكرت جوديا. همست بهدوء عبر الباب: \"أنت تناديني 'زهرتي الجبلية الصغيرة'، يا أبي. لأنك تقول إنني قوية كزهرة تنمو بين حجرين.\""},
         "moral":        "Se souvenir des mots d'amour de ses parents nous donne de la force.",
-        "image_prompt": "A heartwarming textured gouache illustration. Outside, Joudia (fixed character) smiles through her tears. A visualization of a delicate, glowing orange mountain flower appears near her lips, representing her words. The visualization matches the emotional shift toward safety and love."
+        "image_prompt": "A heartwarming textured gouache illustration in a storybook style. A split composition centered on a slightly open rustic wooden door.\n\nOn the left (outside): joudia,She has tears on her cheeks but a gentle, hopeful smile. She leans close to the door, whispering softly, her hands near her lips.\nOn the right (inside): her father stands in a warm, dimly lit home interior. He has a kind expression, listening with emotion, one hand resting against the door. Soft golden light surrounds him.\nthey dont see each other as one inside and the other ouside. and they are only the two characters present in the image"
     },
     {
         "page_number":  22,

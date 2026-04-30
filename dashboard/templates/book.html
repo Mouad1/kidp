@@ -52,9 +52,13 @@
                   class="flex items-center gap-1.5 bg-gray-700 text-white text-xs rounded-lg px-3 py-2 hover:bg-gray-600">
             🔧 Fix All (lineart)
           </button>
-          <button onclick="runAction('assemble','{{ book_name }}')"
+          <button onclick="runAssemble('{{ book_name }}')"
                   class="flex items-center gap-1.5 bg-green-600 text-white text-xs rounded-lg px-3 py-2 hover:bg-green-700">
             📄 Build PDF
+          </button>
+          <button onclick="openCoverModal()"
+                  class="flex items-center gap-1.5 bg-yellow-500 text-white text-xs rounded-lg px-3 py-2 hover:bg-yellow-600">
+            🖼 Cover
           </button>
         </div>
       </div>
@@ -77,10 +81,6 @@
                     class="text-xs bg-gray-100 text-gray-700 rounded-md px-2 py-1 hover:bg-gray-200">
               + Groupe
             </button>
-                  <button onclick="openImportModal()" class="bg-teal-500 hover:bg-teal-600 text-white px-3 py-1.5 rounded-lg text-sm font-bold shadow transition-colors flex items-center gap-1">
-        ➕ Importer
-      </button>
-
               <button onclick="openImportModal()" class="bg-teal-500 hover:bg-teal-600 text-white px-3 py-1.5 rounded-lg text-sm font-bold shadow transition-colors flex items-center gap-1">
                 ➕ Importer
               </button>
@@ -152,7 +152,7 @@
           <!-- Sequence List (drag & drop) -->
           <div class="col-scroll flex-1 p-2 relative bg-gray-50" style="min-height: 0;">
             <div class="absolute inset-0 overflow-y-auto p-2">
-              <div class="space-y-1.5" id="sequence-tbody">
+              <div class="space-y-1.5" id="sequence-list">
                 <!-- Re-rendered by JS -->
               </div>
             </div>
@@ -492,9 +492,13 @@
     async function loadConfig() {
       const res = await fetch(`/api/book/${BOOK_NAME}/config`);
       configData = await res.json();
-      document.getElementById('cfg-title').value    = configData.title;
-      document.getElementById('cfg-subtitle').value = configData.subtitle;
-      document.getElementById('cfg-author').value   = configData.author;
+      // cfg-title/subtitle/author are only present in the config tab (story.html)
+      const cfgTitle = document.getElementById('cfg-title');
+      if (cfgTitle) cfgTitle.value = configData.title;
+      const cfgSub = document.getElementById('cfg-subtitle');
+      if (cfgSub) cfgSub.value = configData.subtitle;
+      const cfgAuthor = document.getElementById('cfg-author');
+      if (cfgAuthor) cfgAuthor.value = configData.author;
       renderCharacters(configData.characters);
       renderSequence(configData.page_sequence);
       if (!allTags) {
@@ -573,22 +577,25 @@
       list.innerHTML = '';
       sequence.forEach((entry, i) => {
         const div = document.createElement('div');
-        div.className = 'flex items-center gap-3 px-4 py-2 hover:bg-gray-50';
+        div.className = 'flex items-center gap-2 px-2 py-1.5 hover:bg-gray-50 rounded-lg';
         div.dataset.index = i;
         div.innerHTML = `
-          <span class="text-xs text-gray-400 w-5">${i + 1}</span>
-          <span class="font-mono text-xs text-gray-600 w-48 truncate" data-seq-file>${esc(entry.file)}</span>
+          <span class="text-xs text-gray-400 w-4 shrink-0">${i + 1}</span>
+          <img src="/images/${BOOK_NAME}/${esc(entry.file)}"
+               class="w-8 h-10 object-cover rounded border border-gray-200 shrink-0 bg-gray-100"
+               onerror="this.style.opacity='0.2'" loading="lazy" />
+          <span class="font-mono text-xs text-gray-500 w-28 truncate shrink-0" data-seq-file>${esc(entry.file)}</span>
           <input type="text" value="${esc(entry.label)}"
-                 class="flex-1 border border-gray-200 rounded px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-indigo-400"
+                 class="flex-1 min-w-0 border border-gray-200 rounded px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-indigo-400"
                  data-seq-label />
-          <div class="flex gap-1">
+          <div class="flex gap-0.5 shrink-0">
             <button onclick="moveSeq(${i}, -1)" class="text-gray-400 hover:text-gray-700 text-xs px-1">↑</button>
             <button onclick="moveSeq(${i},  1)" class="text-gray-400 hover:text-gray-700 text-xs px-1">↓</button>
             <button onclick="deleteSeq(${i})" class="text-red-400 hover:text-red-600 text-xs px-1">🗑</button>
           </div>`;
         list.appendChild(div);
       });
-      document.getElementById('seq-count').textContent = `(${sequence.length} pages)`;
+      document.getElementById('sequence-count').textContent = sequence.length;
     }
 
     function collectSequence() {
@@ -647,14 +654,52 @@
       const urls = {
         generate: `/stream/generate/${bookName}`,
         clean:    `/stream/clean/${bookName}`,
-        assemble: `/stream/assemble/${bookName}`,
       };
       const titles = {
         generate: `🤖 Generating images — ${bookName}`,
         clean:    `🧹 Cleaning images — ${bookName}`,
-        assemble: `⚙️ Assembling PDF — ${bookName}`,
       };
       startStream(urls[action], titles[action]);
+    }
+
+    async function runAssemble(bookName) {
+      let outputDir = '';
+      try {
+        const res = await fetch('/api/choose-folder');
+        const data = await res.json();
+        if (data.cancelled) return;
+        outputDir = data.path || '';
+      } catch (e) {
+        // Fallback: prompt
+        const p = window.prompt('Dossier de destination (laisser vide = output/):', '');
+        if (p === null) return;
+        outputDir = p.trim();
+      }
+      const param = outputDir ? `?output=${encodeURIComponent(outputDir)}` : '';
+      startStream(`/stream/assemble/${bookName}${param}`, `⚙️ Assembling PDF — ${bookName}`);
+    }
+
+    function openCoverModal() {
+      document.getElementById('cover-modal').classList.remove('hidden');
+      const ta = document.getElementById('cover-prompt-text');
+      if (!ta.value) {
+        ta.value = 'Chargement du prompt…';
+        fetch(`/api/book/${BOOK_NAME}/cover-prompt`)
+          .then(r => r.json())
+          .then(d => { ta.value = d.prompt || ''; })
+          .catch(() => { ta.value = ''; });
+      }
+    }
+
+    function closeCoverModal() {
+      document.getElementById('cover-modal').classList.add('hidden');
+    }
+
+    function runCoverFromModal() {
+      const prompt = document.getElementById('cover-prompt-text').value.trim();
+      closeCoverModal();
+      const param = prompt ? `?custom_prompt=${encodeURIComponent(prompt)}` : '';
+      startStream(`/stream/cover/${BOOK_NAME}${param}`, `🖼️ Generating cover — ${BOOK_NAME}`);
     }
 
     function cleanFile(bookName, filename) {
@@ -670,7 +715,7 @@
 
     function startStream(url, title) {
       const wrapper = document.getElementById('console-wrapper');
-      const output  = document.getElementById('console-output');
+      const output  = document.getElementById('stream-output');
       const titleEl = document.getElementById('console-title');
       wrapper.classList.remove('hidden');
       output.textContent = '';
@@ -708,20 +753,12 @@
         .replace(/"/g, '&quot;')
         .replace(/'/g, '&#39;');
     }
-"""
 
-new_text = text[:start_idx+8] + "\n" + original_script + "\n  " + text[end_idx:]
-# NOTE: let builderMode intentionally injected with a syntax bug? No wait!
-new_text = new_text.replace("let builderMode", "let builderMode")
+    // ── Init ────────────────────────────────────────────────────────────────────
+    loadConfig();
+  </script>
 
-with open('dashboard/templates/book.html', 'w', encoding='utf-8') as f:
-    f.write(new_text)
-
-print("HTML script block completely overwritten cleanly.")
-</script>
-</body>
-</html>
-<!-- Import Image Modal -->
+  <!-- Import Image Modal -->
   <div id="import-image-modal" class="hidden fixed inset-0 bg-gray-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-6">
     <div class="bg-white w-full max-w-3xl max-h-[80vh] rounded-2xl shadow-2xl flex flex-col">
       <div class="p-6 border-b border-gray-100 flex justify-between items-center shrink-0">
@@ -748,3 +785,26 @@ print("HTML script block completely overwritten cleanly.")
       </div>
     </div>
   </div>
+
+  <!-- Cover Prompt Modal -->
+  <div id="cover-modal" class="hidden fixed inset-0 bg-gray-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-6">
+    <div class="bg-white w-full max-w-2xl rounded-2xl shadow-2xl flex flex-col">
+      <div class="p-5 border-b border-gray-100 flex justify-between items-center">
+        <h2 class="text-base font-bold text-gray-800">🖼 Générer la couverture</h2>
+        <button onclick="closeCoverModal()" class="text-gray-400 hover:text-gray-900 text-xl font-bold leading-none">✕</button>
+      </div>
+      <div class="p-5 space-y-3">
+        <p class="text-xs text-gray-500">Prompt envoyé au modèle d'image Gemini. Modifie librement avant de générer.</p>
+        <textarea id="cover-prompt-text" rows="10"
+          class="w-full border border-gray-200 rounded-lg px-3 py-2 text-xs resize-y focus:outline-none focus:ring-2 focus:ring-yellow-400 font-mono"
+          placeholder="Le prompt de couverture sera auto-généré depuis la config..."></textarea>
+      </div>
+      <div class="p-5 border-t border-gray-100 flex justify-end gap-3">
+        <button onclick="closeCoverModal()" class="px-4 py-2 text-sm text-gray-600 border border-gray-200 rounded-lg hover:bg-gray-50">Annuler</button>
+        <button onclick="runCoverFromModal()" class="px-5 py-2 text-sm font-semibold text-white bg-yellow-500 rounded-lg hover:bg-yellow-600">🎨 Générer</button>
+      </div>
+    </div>
+  </div>
+
+</body>
+</html>

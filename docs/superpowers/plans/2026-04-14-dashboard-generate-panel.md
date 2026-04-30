@@ -807,7 +807,7 @@ git commit -m "feat: add generate side panel with tags, toggles, prompt preview"
 ```bash
 pkill -f uvicorn
 cd /Users/mouadbelghiti/mo-projects/kidp
-GEMINI_API_KEY="AIzaSyADnCX801njirLtxBlyBxvUvtF-WhaYlIw" python3 -m uvicorn dashboard.app:app --port 8000
+GEMINI_API_KEY="your-key-here" python3 -m uvicorn dashboard.app:app --port 8000
 ```
 
 - [ ] **Step 2: Open http://localhost:8000/book/book2-modern-anime**

@@ -43,6 +43,10 @@
           class="px-4 py-2 text-sm font-semibold text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50">
           ⚙️ Assembler PDF
         </button>
+        <button onclick="openCoverModal()"
+          class="px-4 py-2 text-sm font-semibold text-white bg-yellow-500 rounded-lg outline-none hover:bg-yellow-600">
+          🖼 Cover
+        </button>
         <button onclick="runGenerate()"
           class="px-4 py-2 text-sm font-semibold text-white bg-indigo-600 rounded-lg outline-none hover:bg-indigo-700">
           🎨 Générer les images ({{ book.in_sequence }} pages)
@@ -699,8 +703,50 @@
       saveConfig().then(() => runStreamCommand(`/stream/generate/${BOOK_NAME}?char_id=${p.page_number}&force=true`, `Generate Page ${p.page_number}`));
     }
 
-    function runAssemble() {
-      runStreamCommand(`/stream/assemble/${BOOK_NAME}`, `Assemble PDF: ${BOOK_NAME}`);
+    async function runAssemble() {
+      let outputDir = '';
+      try {
+        const res = await fetch('/api/choose-folder');
+        const data = await res.json();
+        if (data.cancelled) return;
+        outputDir = data.path || '';
+      } catch (e) {
+        const p = window.prompt('Dossier de destination (laisser vide = output/):', '');
+        if (p === null) return;
+        outputDir = p.trim();
+      }
+      const param = outputDir ? `?output=${encodeURIComponent(outputDir)}` : '';
+      runStreamCommand(`/stream/assemble/${BOOK_NAME}${param}`, `Assemble PDF: ${BOOK_NAME}`);
+    }
+
+    function openCoverModal() {
+      document.getElementById('cover-modal').classList.remove('hidden');
+      const ta = document.getElementById('cover-prompt-text');
+      if (!ta.value) {
+        ta.value = 'Chargement du prompt…';
+        fetch(`/api/book/${BOOK_NAME}/cover-prompt`)
+          .then(r => r.json())
+          .then(d => { ta.value = d.prompt || ''; })
+          .catch(() => {
+            ta.value = configData && configData.story_base_prompt
+              ? configData.story_base_prompt : '';
+          });
+      }
+    }
+
+    function closeCoverModal() {
+      document.getElementById('cover-modal').classList.add('hidden');
+    }
+
+    function runCoverFromModal() {
+      const prompt = document.getElementById('cover-prompt-text').value.trim();
+      closeCoverModal();
+      const param = prompt ? `?custom_prompt=${encodeURIComponent(prompt)}` : '';
+      runStreamCommand(`/stream/cover/${BOOK_NAME}${param}`, `🖼️ Generating cover — ${BOOK_NAME}`);
+    }
+
+    function runCover() {
+      openCoverModal();
     }
 
 
@@ -714,6 +760,27 @@
     // Init
     loadConfig();
   </script>
+
+  <!-- Cover Prompt Modal -->
+  <div id="cover-modal" class="hidden fixed inset-0 bg-gray-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-6">
+    <div class="bg-white w-full max-w-2xl rounded-2xl shadow-2xl flex flex-col">
+      <div class="p-5 border-b border-gray-100 flex justify-between items-center">
+        <h2 class="text-base font-bold text-gray-800">🖼 Générer la couverture</h2>
+        <button onclick="closeCoverModal()" class="text-gray-400 hover:text-gray-900 text-xl font-bold leading-none">✕</button>
+      </div>
+      <div class="p-5 space-y-3">
+        <p class="text-xs text-gray-500">Prompt envoyé au modèle d'image Gemini. Modifie librement avant de générer.</p>
+        <textarea id="cover-prompt-text" rows="12"
+          class="w-full border border-gray-200 rounded-lg px-3 py-2 text-xs resize-y focus:outline-none focus:ring-2 focus:ring-yellow-400 font-mono"
+          placeholder="Le STORY_BASE_PROMPT sera pré-rempli automatiquement..."></textarea>
+      </div>
+      <div class="p-5 border-t border-gray-100 flex justify-end gap-3">
+        <button onclick="closeCoverModal()" class="px-4 py-2 text-sm text-gray-600 border border-gray-200 rounded-lg hover:bg-gray-50">Annuler</button>
+        <button onclick="runCoverFromModal()" class="px-5 py-2 text-sm font-semibold text-white bg-yellow-500 rounded-lg hover:bg-yellow-600">🎨 Générer</button>
+      </div>
+    </div>
+  </div>
+
 </body>
 
 </html>

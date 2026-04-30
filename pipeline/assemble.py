@@ -294,7 +294,7 @@ def load_config(book_name: str) -> types.ModuleType:
 
 # ── Assembler ──────────────────────────────────────────────────────────────────
 
-def assemble(book_name: str) -> None:
+def assemble(book_name: str, output_dir: str | None = None) -> None:
     """
     Build the full interior PDF for the given book.
 
@@ -428,7 +428,9 @@ def assemble(book_name: str) -> None:
             sys.exit(1)
 
         # ── Assemble with img2pdf (produces zero-font PDF) ─────────────────────────
-        output_path = OUTPUT / f"{book_name}_{lang}_interior_FINAL.pdf"
+        dest_dir = pathlib.Path(output_dir) if output_dir else OUTPUT
+        dest_dir.mkdir(parents=True, exist_ok=True)
+        output_path = dest_dir / f"{book_name}_{lang}_interior_FINAL.pdf"
         layout = img2pdf.get_layout_fun(
             (img2pdf.in_to_pt(8.5), img2pdf.in_to_pt(11.0))
         )
@@ -479,9 +481,15 @@ for a full example.
         metavar="BOOK_FOLDER",
         help="Name of the folder inside books/ (e.g. book1-90s-legends)",
     )
+    parser.add_argument(
+        "--output",
+        default=None,
+        metavar="OUTPUT_DIR",
+        help="Directory to save the PDF (default: output/ inside project root)",
+    )
     return parser.parse_args()
 
 
 if __name__ == "__main__":
     args = _parse_args()
-    assemble(args.book)
+    assemble(args.book, getattr(args, 'output', None))

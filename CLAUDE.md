@@ -38,6 +38,22 @@ Persistent context across sessions. Web viewer at http://localhost:37777
 4. **API key = env var only** — `GEMINI_API_KEY`. Never in code or committed files.
 5. **One character per Gemini prompt** — grid generation produces poor quality.
 
+## Cover generation rules (Amazigh children's story style)
+
+These rules apply to `pipeline/cover.py` and any future AI cover generation. They encode the
+visual style of the reference cover "Joudia and Baba Inouva":
+
+| Rule | Requirement |
+|---|---|
+| Art style | Cinematic painterly digital illustration. Warm vs cool contrast. Rich atmospheric depth. Children's book quality. |
+| Setting | Traditional Amazigh/Berber mountain village at night. Snow-capped Atlas Mountains. Pine forest silhouette. Stone/timber cabins with warm glowing windows. Stone path to wooden door. |
+| Lighting | Single warm golden light source from inside an open door, spilling onto the foreground character. Exterior is deep indigo/cool blue. |
+| Composition | Portrait (3:4). Young girl in lower-center foreground. Elderly man in open doorway (right side). Magical element (glowing flower/light) between them as focal point. Village + mountains receding into dark background. |
+| Color palette | Exterior: deep indigo, cool blue-grey, muted teal-green. Interior: amber, golden, orange. Magical: glowing orange with golden sparkles. Character: warm earth tones. |
+| Characters | Joudia: dark curly hair, tan/beige patterned cardigan, dark skirt, brown boots, backpack. Baba Inouva: white/grey short hair, dark cardigan/vest, kind expression in doorway. |
+| Text in image | **NEVER** embed title text in the AI image — always add programmatically via PIL. |
+| Output format | Portrait PNG, 300 DPI, saved to `output/<book_name>_COVER.png`. |
+
 ## Pipeline commands
 
 ```bash

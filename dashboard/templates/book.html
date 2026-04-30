@@ -898,46 +898,54 @@
       const refined   = diffPanel.dataset.refinedPrompt;
       if (!refined) { showToast('Aucun prompt raffiné trouvé'); return; }
 
-      // Update the hidden prompt field for this character in the character table
-      const charRows = document.querySelectorAll('#characters-tbody tr');
-      for (const tr of charRows) {
-        const idField = tr.querySelector('[data-field="id"]');
-        if (idField && idField.value.trim() === charId) {
-          const promptField = tr.querySelector('[data-field="prompt"]');
-          if (promptField) promptField.value = refined;
-          break;
+      btn.disabled = true;
+      btn.textContent = '⏳ Application...';
+
+      try {
+        // Update the hidden prompt field for this character in the character table
+        const charRows = document.querySelectorAll('#characters-tbody tr');
+        for (const tr of charRows) {
+          const idField = tr.querySelector('[data-field="id"]');
+          if (idField && idField.value.trim() === charId) {
+            const promptField = tr.querySelector('[data-field="prompt"]');
+            if (promptField) promptField.value = refined;
+            break;
+          }
         }
-      }
 
-      // Keep the card's data attribute in sync for future feedback sessions
-      if (card) card.dataset.currentPrompt = refined;
+        // Keep the card's data attribute in sync for future feedback sessions
+        if (card) card.dataset.currentPrompt = refined;
 
-      // Save config to backend (cfg-title/subtitle/author don't exist in this view,
-      // fall back to configData values which were loaded on init)
-      const payload = {
-        title:         configData?.title || '',
-        subtitle:      configData?.subtitle || '',
-        author:        configData?.author || '',
-        testpen:       configData?.testpen,
-        images_folder: configData?.images_folder,
-        characters:    collectCharacters(),
-        page_sequence: collectSequence(),
-      };
-      const saveRes = await fetch(`/api/book/${BOOK_NAME}/config`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload),
-      });
-      if (!saveRes.ok) {
-        showToast('❌ Erreur lors de la sauvegarde du prompt');
-        return;
-      }
+        // Save config to backend (cfg-title/subtitle/author don't exist in this view,
+        // fall back to configData values which were loaded on init)
+        const payload = {
+          title:         configData?.title || '',
+          subtitle:      configData?.subtitle || '',
+          author:        configData?.author || '',
+          testpen:       configData?.testpen,
+          images_folder: configData?.images_folder,
+          characters:    collectCharacters(),
+          page_sequence: collectSequence(),
+        };
+        const saveRes = await fetch(`/api/book/${BOOK_NAME}/config`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload),
+        });
+        if (!saveRes.ok) {
+          showToast('❌ Erreur lors de la sauvegarde du prompt');
+          return;
+        }
 
-      // Trigger regeneration for this specific file
-      if (filename) {
-        regenerate(BOOK_NAME, filename);
+        // Trigger regeneration for this specific file
+        if (filename) {
+          regenerate(BOOK_NAME, filename);
+        }
+        showToast('Prompt mis à jour — génération lancée');
+      } finally {
+        btn.disabled = false;
+        btn.textContent = '✅ Appliquer & Régénérer';
       }
-      showToast('Prompt mis à jour — génération lancée');
     }
 
     // ── Init ────────────────────────────────────────────────────────────────────

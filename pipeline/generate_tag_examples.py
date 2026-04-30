@@ -22,7 +22,6 @@ if str(_ROOT) not in sys.path:
 
 try:
     from google import genai
-    from google.genai import types as genai_types
 except ImportError:
     print("Missing dependency. Run:  pip install google-genai")
     sys.exit(1)

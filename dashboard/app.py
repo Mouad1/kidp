@@ -35,6 +35,11 @@ sys.path.insert(0, str(ROOT))
 app = FastAPI(title="KDP Dashboard")
 templates = Jinja2Templates(directory=str(pathlib.Path(__file__).parent / "templates"))
 
+from fastapi.staticfiles import StaticFiles as _StaticFiles
+_ASSETS_DIR = ROOT / "assets"
+_ASSETS_DIR.mkdir(exist_ok=True)
+app.mount("/assets", _StaticFiles(directory=str(_ASSETS_DIR)), name="assets")
+
 
 # ── Pydantic models ─────────────────────────────────────────────────────────────
 
@@ -494,6 +499,12 @@ class GlobalReplaceModel(BaseModel):
     search: str
     replace: str
 
+
+class FeedbackModel(BaseModel):
+    feedback: str
+    current_prompt: str
+    page_ref: str  # character id (coloring) or str(page_number) (story)
+
 @app.post("/api/books/{book_name}/global-replace")
 async def api_global_replace(book_name: str, data: GlobalReplaceModel):
     cfg_module = _load_config(book_name)
@@ -637,13 +648,51 @@ async def api_new_book(data: NewBookModel):
 
 @app.get("/api/prompt/tags")
 async def api_prompt_tags():
+    def _examples(category: str, tags: list[str]) -> dict[str, str]:
+        slug = lambda t: t.lower().replace(" ", "_").replace("-", "_").replace("/", "_")
+        return {slug(t): f"/assets/tag_examples/{category}/{slug(t)}.png" for t in tags}
+
     return {
-        "style": STYLE_TAGS,
-        "pose": POSE_TAGS,
-        "elements": ELEMENT_TAGS,
-        "theme": THEME_TAGS,
-        "group_dynamics": GROUP_DYNAMICS,
+        "style":             STYLE_TAGS,
+        "style_examples":    _examples("style",    STYLE_TAGS),
+        "pose":              POSE_TAGS,
+        "pose_examples":     _examples("pose",     POSE_TAGS),
+        "elements":          ELEMENT_TAGS,
+        "elements_examples": _examples("elements", ELEMENT_TAGS),
+        "theme":             THEME_TAGS,
+        "theme_examples":    _examples("theme",    THEME_TAGS),
+        "group_dynamics":    GROUP_DYNAMICS,
     }
+
+
+@app.post("/api/feedback/{book_name}")
+async def api_feedback(book_name: str, data: FeedbackModel):
+    if not os.environ.get("GEMINI_API_KEY"):
+        raise HTTPException(status_code=500, detail="GEMINI_API_KEY non configuré.")
+
+    process = await asyncio.create_subprocess_exec(
+        sys.executable, str(ROOT / "pipeline" / "refine_prompt.py"),
+        "--prompt",   data.current_prompt,
+        "--feedback", data.feedback,
+        stdout=asyncio.subprocess.PIPE,
+        stderr=asyncio.subprocess.STDOUT,
+        env=os.environ.copy(),
+    )
+    stdout, _ = await process.communicate()
+
+    if process.returncode != 0:
+        raise HTTPException(status_code=500,
+                            detail=f"Script failed: {stdout.decode()}")
+
+    out_text = stdout.decode().strip()
+    try:
+        parsed = json.loads(out_text)
+        if "error" in parsed:
+            raise HTTPException(status_code=500, detail=parsed["error"])
+        return parsed
+    except json.JSONDecodeError:
+        raise HTTPException(status_code=500,
+                            detail=f"Bad JSON from Gemini: {out_text[:300]}")
 
 
 @app.get("/images/{book_name}/{filename}")

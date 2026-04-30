@@ -115,6 +115,18 @@
         <!-- Group Panel -->
         <div id="pb-group" class="hidden flex-col h-full overflow-y-auto"></div>
 
+        <!-- Tag Gallery Panel -->
+        <div id="tag-gallery-panel" class="hidden bg-gray-50 border border-gray-200 rounded-xl p-3 mt-2">
+          <div class="flex items-center justify-between mb-2">
+            <span id="tg-label" class="text-xs font-semibold text-gray-600"></span>
+            <button onclick="document.getElementById('tag-gallery-panel').classList.add('hidden')"
+                    class="text-gray-400 hover:text-gray-600 text-xs">✕</button>
+          </div>
+          <img id="tg-img" src="" alt="Tag example"
+               class="w-full rounded-lg border border-gray-200 bg-white"
+               onerror="this.closest('#tag-gallery-panel').innerHTML='<p class=\'text-xs text-gray-400 p-2\'>No example yet.<br>Run: <code>python3 pipeline/generate_tag_examples.py</code></p>'" />
+        </div>
+
       </div>
 
       <!-- ── Col 3: Sequence & Image Generation ── -->
@@ -170,6 +182,7 @@
 
     // ── Prompt Builder state ────────────────────────────────────────────────────
     let allTags = null;
+    let tagExamples = null;
     let builderMode = 'none'; // 'none' | 'solo' | 'group'
     window.activeSoloIndex = null;
 
@@ -278,6 +291,7 @@
     }
 
     function attachTagListeners(mode) {
+      const keyToCategory = { styleTags: 'style', poseTags: 'pose', elementTags: 'elements', themeTags: 'theme' };
       document.querySelectorAll('.tag-pill').forEach(btn => {
         btn.addEventListener('click', () => {
           const tag = btn.dataset.tag;
@@ -293,6 +307,8 @@
             else groupState[key].splice(idx, 1);
             renderGroupPanel();
           }
+          const cat = keyToCategory[key];
+          if (cat) showTagExample(tag, cat);
         });
       });
     }
@@ -503,7 +519,20 @@
       renderSequence(configData.page_sequence);
       if (!allTags) {
         const tagRes = await fetch('/api/prompt/tags');
-        allTags = await tagRes.json();
+        const tagData = await tagRes.json();
+        allTags = {
+          style:         tagData.style,
+          pose:          tagData.pose,
+          elements:      tagData.elements,
+          theme:         tagData.theme,
+          group_dynamics: tagData.group_dynamics,
+        };
+        tagExamples = {
+          style:    tagData.style_examples    || {},
+          pose:     tagData.pose_examples     || {},
+          elements: tagData.elements_examples || {},
+          theme:    tagData.theme_examples    || {},
+        };
       }
     }
 
@@ -742,6 +771,23 @@
     function closeConsole() {
       if (activeSource) { activeSource.close(); activeSource = null; }
       document.getElementById('console-wrapper').classList.add('hidden');
+    }
+
+    function _slugify(tag) {
+      return tag.toLowerCase().replace(/ /g, '_').replace(/-/g, '_').replace(/\//g, '_');
+    }
+
+    function showTagExample(tag, category) {
+      if (!tagExamples) return;
+      const examples = tagExamples[category] || {};
+      const slug = _slugify(tag);
+      const url = examples[slug];
+      const panel = document.getElementById('tag-gallery-panel');
+      const img   = document.getElementById('tg-img');
+      const label = document.getElementById('tg-label');
+      label.textContent = tag;
+      img.src = url || '';
+      panel.classList.remove('hidden');
     }
 
     function esc(s) {

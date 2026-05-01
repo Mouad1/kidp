@@ -133,6 +133,38 @@
 
       <!-- ── Col 3: Sequence & Image Generation ── -->
       <div class="space-y-3">
+
+        <!-- Metadata + Config card -->
+        <div class="bg-white border border-gray-200 rounded-xl p-4 space-y-3">
+          <h3 class="text-xs font-semibold text-gray-500 uppercase tracking-wide">Livre</h3>
+          <div class="space-y-2">
+            <div>
+              <label class="text-xs text-gray-400 block mb-0.5">Titre</label>
+              <input id="cfg-title" type="text"
+                     class="w-full border border-gray-200 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+            </div>
+            <div>
+              <label class="text-xs text-gray-400 block mb-0.5">Sous-titre</label>
+              <input id="cfg-subtitle" type="text"
+                     class="w-full border border-gray-200 rounded-lg px-3 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+            </div>
+            <div>
+              <label class="text-xs text-gray-400 block mb-0.5">Auteur</label>
+              <input id="cfg-author" type="text"
+                     class="w-full border border-gray-200 rounded-lg px-3 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+            </div>
+          </div>
+          <div class="pt-2 border-t border-gray-100 space-y-1">
+            <h4 class="text-xs font-semibold text-gray-500 uppercase tracking-wide">Config</h4>
+            <p class="text-xs text-gray-400">Dossier images : <span id="cfg-images-folder" class="font-mono text-gray-600"></span></p>
+            <p class="text-xs text-gray-400">Catégorie : <span id="cfg-category" class="text-gray-600"></span></p>
+          </div>
+          <button onclick="saveConfig(BOOK_NAME)"
+                  class="w-full text-xs bg-indigo-600 text-white rounded-lg px-4 py-2 hover:bg-indigo-700 transition-colors">
+            💾 Sauvegarder config
+          </button>
+        </div>
+
         <div class="bg-white border border-gray-200 rounded-xl overflow-hidden flex flex-col" style="height:calc(100vh - 110px);">
           <div class="px-3 py-2.5 border-b border-gray-100 flex items-center justify-between shrink-0">
             <h2 class="font-semibold text-xs text-gray-600 uppercase tracking-wide">
@@ -533,6 +565,10 @@
       if (cfgSub) cfgSub.value = configData.subtitle;
       const cfgAuthor = document.getElementById('cfg-author');
       if (cfgAuthor) cfgAuthor.value = configData.author;
+      const cfgImgFolder = document.getElementById('cfg-images-folder');
+      if (cfgImgFolder) cfgImgFolder.textContent = configData.images_folder || '—';
+      const cfgCategory = document.getElementById('cfg-category');
+      if (cfgCategory) cfgCategory.textContent = configData.category || '—';
       renderCharacters(configData.characters);
       // Init drag-and-drop on character list
       if (window._charSortable) window._charSortable.destroy();

@@ -225,12 +225,26 @@
       renderSoloPanel(c);
     }
 
+    function getCharacterImageUrl(charId) {
+      if (!configData?.page_sequence) return '';
+      const entry = configData.page_sequence.find(e =>
+        e.file.replace(/^[^_]+_/, '').replace(/\.\w+$/, '') === charId
+      );
+      return entry ? `/images/${BOOK_NAME}/${entry.file}` : '';
+    }
+
     function renderSoloPanel(character) {
       document.getElementById('pb-empty').classList.add('hidden');
       document.getElementById('pb-group').classList.add('hidden');
       document.getElementById('pb-solo').classList.remove('hidden');
 
       document.getElementById('pb-solo-content').innerHTML = `
+        <div class="bg-gray-50 border-b border-gray-200 flex items-center justify-center shrink-0" style="height:180px">
+          <img src="${getCharacterImageUrl(character.id)}"
+               alt="${esc(character.name || character.id)}"
+               class="h-full w-full object-contain"
+               onerror="this.parentElement.innerHTML='<span class=\\'text-xs text-gray-400\\'>Aucune image générée</span>'" />
+        </div>
         <div class="px-5 py-4 border-b border-gray-100 flex items-center justify-between">
           <div>
             <p class="font-semibold text-sm">${esc(character.name || character.id)}</p>

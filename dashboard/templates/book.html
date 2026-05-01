@@ -89,11 +89,13 @@
               </button>
             </div>
           </div>
-          <div class="col-scroll">
-            <table class="w-full text-left" id="characters-tbody">
-              <!-- Re-rendered by JS -->
-            </table>
+          <div class="px-3 pb-2">
+            <button onclick="addCharInline()"
+                    class="w-full mt-2 text-xs text-indigo-600 hover:text-indigo-800 border border-dashed border-indigo-200 rounded-lg py-2 hover:border-indigo-400 transition-colors">
+              + Nouveau personnage
+            </button>
           </div>
+          <div id="characters-list" class="space-y-0.5 overflow-y-auto" style="max-height: calc(100vh - 260px)"></div>
         </div>
       </div>
 
@@ -343,10 +345,13 @@
     function applySoloPrompt() {
       if (window.activeSoloIndex === null) return;
       const prompt = buildSoloPromptText();
-      const rows = document.querySelectorAll('#characters-tbody tr');
-      const row = rows[window.activeSoloIndex];
-      if (row) {
-        row.querySelector('[data-field="prompt"]').value = prompt;
+      const cards = document.querySelectorAll('#characters-list .char-card');
+      const card = cards[window.activeSoloIndex];
+      if (card) {
+        card.querySelector('[data-field="prompt"]').value = prompt;
+        if (configData?.characters[window.activeSoloIndex]) {
+          configData.characters[window.activeSoloIndex].prompt = prompt;
+        }
       }
       showToast('✅ Prompt appliqué au personnage');
     }
@@ -529,6 +534,20 @@
       const cfgAuthor = document.getElementById('cfg-author');
       if (cfgAuthor) cfgAuthor.value = configData.author;
       renderCharacters(configData.characters);
+      // Init drag-and-drop on character list
+      if (window._charSortable) window._charSortable.destroy();
+      window._charSortable = Sortable.create(document.getElementById('characters-list'), {
+        handle: '.drag-handle',
+        animation: 150,
+        onEnd(evt) {
+          const moved = configData.characters.splice(evt.oldIndex, 1)[0];
+          configData.characters.splice(evt.newIndex, 0, moved);
+          renderCharacters(configData.characters);
+          if (window.activeSoloIndex === evt.oldIndex) {
+            window.activeSoloIndex = evt.newIndex;
+          }
+        }
+      });
       renderSequence(configData.page_sequence);
       if (!allTags) {
         const tagRes = await fetch('/api/prompt/tags');
@@ -550,60 +569,81 @@
     }
 
     function renderCharacters(characters) {
-      const tbody = document.getElementById('characters-tbody');
-      tbody.innerHTML = '';
-      characters.forEach((c, i) => tbody.appendChild(makeCharRow(c, i)));
-      document.getElementById('char-count').textContent = `(${characters.length})`;
+      const list = document.getElementById('characters-list');
+      list.innerHTML = '';
+      characters.forEach((c, i) => list.appendChild(makeCharCard(c, i)));
+      const countEl = document.getElementById('char-count');
+      if (countEl) countEl.textContent = `(${characters.length})`;
     }
 
-    function makeCharRow(c, i) {
-      const tr = document.createElement('tr');
-      tr.className = 'hover:bg-gray-50 cursor-pointer' + (window.activeSoloIndex === i ? ' bg-indigo-50' : '');
-      tr.dataset.index = i;
-      tr.onclick = () => typeof selectCharacter === 'function' ? selectCharacter(i) : null;
-      tr.innerHTML = `
-        <td class="px-3 py-2">
-          <input type="text" value="${esc(c.id)}" placeholder="gojo"
-                 class="w-full border border-gray-200 rounded px-2 py-1 text-xs font-mono focus:outline-none focus:ring-1 focus:ring-indigo-400"
-                 data-field="id" onclick="event.stopPropagation()" />
-        </td>
-        <td class="px-3 py-2">
-          <input type="text" value="${esc(c.name)}" placeholder="The Hero"
-                 class="w-full border border-gray-200 rounded px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-indigo-400"
-                 data-field="name" onclick="event.stopPropagation()" />
-          <input type="hidden" value="${esc(c.series)}" data-field="series" />
-          <input type="hidden" value="${esc(c.prompt)}" data-field="prompt" />
-        </td>
-        <td class="px-3 py-2 text-center whitespace-nowrap">
-          <button onclick="event.stopPropagation(); moveChar(${i}, -1)" class="text-gray-400 hover:text-gray-700 px-1">↑</button>
-          <button onclick="event.stopPropagation(); moveChar(${i},  1)" class="text-gray-400 hover:text-gray-700 px-1">↓</button>
-        </td>
-        <td class="px-3 py-2 text-center">
-          <button onclick="event.stopPropagation(); deleteChar(${i})" class="text-red-400 hover:text-red-600 text-xs">🗑</button>
-        </td>`;
-      return tr;
+    function makeCharCard(c, i) {
+      const div = document.createElement('div');
+      div.className = 'char-card group flex items-center gap-2 px-3 py-2 rounded-lg border border-transparent hover:bg-gray-50 cursor-pointer transition-colors' +
+        (window.activeSoloIndex === i ? ' bg-indigo-50 border-indigo-200' : '');
+      div.dataset.index = i;
+      div.onclick = () => selectCharacter(i);
+      div.innerHTML = `
+        <span class="drag-handle text-gray-300 hover:text-gray-500 cursor-grab text-sm select-none">⠿</span>
+        <div class="w-7 h-7 rounded-full bg-indigo-100 text-indigo-600 text-xs font-bold flex items-center justify-center shrink-0 select-none">
+          ${esc((c.name || c.id || '?')[0].toUpperCase())}
+        </div>
+        <div class="flex-1 min-w-0">
+          <p class="text-xs font-medium text-gray-800 truncate">${esc(c.name || c.id)}</p>
+          <p class="text-xs text-gray-400 font-mono truncate">${esc(c.id)}</p>
+        </div>
+        <input type="hidden" data-field="id"     value="${esc(c.id)}" />
+        <input type="hidden" data-field="name"   value="${esc(c.name)}" />
+        <input type="hidden" data-field="series" value="${esc(c.series || '')}" />
+        <input type="hidden" data-field="prompt" value="${esc(c.prompt || '')}" />
+        <button onclick="event.stopPropagation(); deleteChar(${i})"
+                class="text-gray-300 hover:text-red-500 text-xs shrink-0 opacity-0 group-hover:opacity-100 transition-opacity">✕</button>`;
+      return div;
     }
 
     function collectCharacters() {
-      const rows = document.querySelectorAll('#characters-tbody tr');
-      return Array.from(rows).map(tr => ({
-        id:     tr.querySelector('[data-field="id"]').value.trim(),
-        name:   tr.querySelector('[data-field="name"]').value.trim(),
-        series: tr.querySelector('[data-field="series"]').value.trim(),
-        prompt: tr.querySelector('[data-field="prompt"]').value.trim(),
+      return Array.from(document.querySelectorAll('#characters-list .char-card')).map(card => ({
+        id:     card.querySelector('[data-field="id"]')?.value     || '',
+        name:   card.querySelector('[data-field="name"]')?.value   || '',
+        series: card.querySelector('[data-field="series"]')?.value || '',
+        prompt: card.querySelector('[data-field="prompt"]')?.value || '',
       }));
     }
 
+    function addCharInline() {
+      if (!configData) return;
+      const newChar = { id: '', name: '', series: '', prompt: '' };
+      configData.characters.push(newChar);
+      renderCharacters(configData.characters);
+      const cards = document.querySelectorAll('#characters-list .char-card');
+      const lastCard = cards[cards.length - 1];
+      const i = configData.characters.length - 1;
+      lastCard.innerHTML = `
+        <span class="drag-handle text-gray-300 text-sm select-none">⠿</span>
+        <div class="flex-1 space-y-1" onclick="event.stopPropagation()">
+          <input type="text" placeholder="id (ex: gojo)" autofocus
+                 class="w-full border border-indigo-300 rounded px-2 py-1 text-xs font-mono focus:outline-none focus:ring-1 focus:ring-indigo-400"
+                 oninput="configData.characters[${i}].id=this.value" />
+          <input type="text" placeholder="Nom du personnage"
+                 class="w-full border border-gray-200 rounded px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-indigo-400"
+                 oninput="configData.characters[${i}].name=this.value" />
+        </div>
+        <button onclick="event.stopPropagation(); configData.characters.splice(${i},1); renderCharacters(configData.characters)"
+                class="text-gray-300 hover:text-red-500 text-xs shrink-0">✕</button>`;
+      lastCard.querySelector('input').focus();
+    }
+
     function addCharacterRow() {
-      const chars = collectCharacters();
-      chars.push({ id: '', name: '', series: '', prompt: '' });
-      renderCharacters(chars);
+      addCharInline();
     }
 
     function deleteChar(i) {
-      const chars = collectCharacters();
-      chars.splice(i, 1);
-      renderCharacters(chars);
+      configData.characters.splice(i, 1);
+      renderCharacters(configData.characters);
+      if (window.activeSoloIndex === i) {
+        document.getElementById('pb-solo').classList.add('hidden');
+        document.getElementById('pb-empty').classList.remove('hidden');
+        window.activeSoloIndex = undefined;
+      }
     }
 
     function moveChar(i, dir) {
@@ -915,12 +955,12 @@
       btn.textContent = '⏳ Application...';
 
       try {
-        // Update the hidden prompt field for this character in the character table
-        const charRows = document.querySelectorAll('#characters-tbody tr');
-        for (const tr of charRows) {
-          const idField = tr.querySelector('[data-field="id"]');
+        // Update the hidden prompt field for this character in the character list
+        const charCards = document.querySelectorAll('#characters-list .char-card');
+        for (const card of charCards) {
+          const idField = card.querySelector('[data-field="id"]');
           if (idField && idField.value.trim() === charId) {
-            const promptField = tr.querySelector('[data-field="prompt"]');
+            const promptField = card.querySelector('[data-field="prompt"]');
             if (promptField) promptField.value = refined;
             break;
           }

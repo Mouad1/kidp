@@ -21,6 +21,17 @@ _(rien pour l'instant)_
 
 ---
 
+## 📋 À faire — Storefront client (StoryForge)
+
+> Workstream C — séparé du dashboard admin. Spec : `docs/superpowers/specs/2026-06-01-storyforge-storefront-and-pricing-design.md` (section auth + paiement). Nécessite son propre plan avant implémentation.
+
+- [ ] **Expérience client linéaire** — route `/store` distincte de l'admin : catalogue d'histoires existantes → personnalisation (prénom + photo de l'enfant) → aperçu (pages + couverture) → paiement. `/book/<slug>` reste admin-only.
+- [ ] **Auth email + code de confirmation** — SMTP gratuit, interface `code_sender` pluggable (SMS différé tant qu'aucune solution gratuite). Pas de mot de passe.
+- [ ] **Paiement Stripe** — checkout après aperçu, prix calculé via `/api/pricing` (pages, couleur, papier, couverture).
+- [ ] **Aperçu client** — prévisualiser l'histoire générée (prénom + photo de l'enfant) depuis la liste d'histoires, couverture incluse, avant achat.
+
+---
+
 ## 📋 À faire — Pipeline
 
 - [ ] **pipeline/generate_scenes.py** — générer les 6 pages de scènes de groupe automatiquement
@@ -81,6 +92,8 @@ _(rien pour l'instant)_
 
 ## ✅ Fait
 
+- [x] **StoryForge — multilingue + pages + prix + couverture** — fix du bug multilingue (texte par page suit les langues réellement cochées via `translate_pages`, le `language_default` du template reste la source) ; sélecteur de nombre de pages en *live expansion* (`expand_narrative` appelle le modèle texte pour produire exactement N pages quand `page_count != len(template.pages)`) ; calculateur de prix admin-configurable (`pipeline/pricing.py` + bloc `pricing` dans `settings.json` + endpoint `/api/pricing`, estimation live dans l'UI) ; génération de couverture (`storyforge.generate_cover`, héros en référence, titre jamais dans le prompt IA) avec aperçu dans le wizard. Tests : +16 (i18n, expand, cover, pricing, API). Plan : `docs/superpowers/plans/2026-06-01-storyforge-storefront-and-pricing.md`.
+- [x] **StoryForge — livres persos depuis photos réelles** — module `storyforge/` : templates JSON + variables, hero consistant depuis 1–3 photos (portrait canonique en référence), génération page par page, build vers `books/<name>/config.py` réutilisé par toute la pipeline. UI `/storybook` réactive (drag-drop, SSE, zéro refresh). Tests : 31 (DI via `ImageGenerator` Protocol + `FakeImageGenerator`, zéro réseau). Guide : `README.storyforge.md`.
 - [x] Pipeline Karpathy restructuré (pipeline/assemble.py + clean.py + books/*/config.py)
 - [x] Interior PDF Book 1 — 59p, 0 fonts, 83.8 MB
 - [x] Interior PDF Book 2 — 51p, 0 fonts, 32.8 MB

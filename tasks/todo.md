@@ -27,3 +27,29 @@
 - [ ] `pipeline/generate.py` — appel API Gemini (actuellement manuel)
 - [ ] `pipeline/clean_all.py` — clean batch pour un livre entier
 - [ ] `pipeline/publish.py` — upload KDP via Selenium
+
+## StoryForge — livres persos depuis photos réelles
+
+Module communautaire réutilisable. Voir `README.storyforge.md`.
+
+### Fait
+
+- [x] `storyforge/` — types, templates (JSON + variables + tokens réservés HERO/HERO_NAME)
+- [x] Engine pur `resolve(template, variables, hero)` → `list[PageSpec]`
+- [x] Identity — `build_hero` depuis 1–3 photos + portrait canonique de référence (consistance)
+- [x] `generate_page` + `build_book` → `books/<name>/config.py` réutilisé par la pipeline
+- [x] DI via `ImageGenerator` Protocol + `FakeImageGenerator` (tests 100% offline)
+- [x] `GeminiBackend` — génération image + analyse photo
+- [x] Endpoints dashboard (`/api/storyforge/*`, SSE `/stream/storyforge/*`)
+- [x] UI `/storybook` — flow 3 étapes, drag-drop photos, SSE, zéro refresh
+- [x] Template exemple `brave-little-explorer` + guide communauté `README.storyforge.md`
+- [x] 31 tests (types, templates, engine, identity, generator, builder, backend, API, public API)
+
+### À faire
+
+- [ ] Templates supplémentaires (anniversaire, dodo, première rentrée, etc.)
+- [ ] Mode `lineart` testé bout-en-bout (livre de coloriage perso)
+- [ ] Packaging pip installable (`pip install storyforge`) pour partage communautaire
+- [ ] Galerie de previews des pages dans l'UI avant build final
+- [ ] Régénération d'une page seule depuis l'UI
+

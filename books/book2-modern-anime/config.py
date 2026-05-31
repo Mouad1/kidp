@@ -10,14 +10,28 @@ import pathlib
 
 # ── Identity ───────────────────────────────────────────────────────────────────
 
-TITLE    = "Anime Legends: Coloring Our Stories"
-SUBTITLE = "Anime Coloring Book for Dads & Kids"
-AUTHOR   = "Marco Belghiti"
+CATEGORY       = "coloring"
+STORY_FORMAT   = "colored"
+STORY_LAYOUT   = "top_bottom"
+LANGUAGES      = ["fr"]
+TITLE          = "Anime Legends: Coloring Our Stories"
+SUBTITLE       = "Anime Coloring Book for Dads & Kids"
+AUTHOR         = "Marco Belghiti"
+INTRO_TEXT     = ""
+VALUES_LEARNED = ""
 
 # ── Paths ──────────────────────────────────────────────────────────────────────
 
 IMAGES_DIR = pathlib.Path(__file__).parent.parent.parent / "images" / "book2-modern-anime"
 TESTPEN    = ""
+
+# ── Story settings ────────────────────────────────────────────────────────────
+
+STORY_BASE_PROMPT = ""
+
+# ── Story Pages ───────────────────────────────────────────────────────────────
+
+PAGES = []
 
 # ── Character roster ──────────────────────────────────────────────────────────
 
@@ -26,157 +40,244 @@ CHARACTERS = [
         "id":     "gojo",
         "name":   "The Boundless Sorcerer",
         "series": "Jujutsu Kaisen",
-        "prompt": "tall anime sorcerer with fluffy white hair and a white blindfold, school uniform jacket, hands relaxed in pockets, infinity energy shimmering around him, confident smirk, full body",
+        "prompt": "tall anime sorcerer with fluffy white hair and a white blindfold, school uniform jacket, hands relaxed in pockets, infinity energy shimmering around him, confident smirk, full body, realistic proportions, Geometric",
+        "source_type": "",
+        "source_title": "",
+        "source_character_name": "",
     },
     {
         "id":     "levi",
         "name":   "Humanity's Strongest",
         "series": "Attack on Titan",
-        "prompt": "levi from Attack on Titan, Survey Corps uniform with vertical maneuvering equipment, short undercut hair, intense expression, dual blades drawn, full body",
+        "prompt": "levi from Attack on Titan, Survey Corps uniform with vertical maneuvering equipment, short undercut hair, intense expression, dual blades drawn, full body, realistic proportions, Art Nouveau",
+        "source_type": "",
+        "source_title": "",
+        "source_character_name": "",
     },
     {
         "id":     "nezuko",
         "name":   "The Demon Sister",
         "series": "Demon Slayer",
-        "prompt": "nezuko from Demon Slayer, small demon girl with long wavy hair with pink tips, bamboo mouthpiece, pink hemp haori with triangle patterns, geta sandals with white socks, full body, calm but intense expression",
+        "prompt": "nezuko from Demon Slayer, small demon girl with long wavy hair with pink tips, bamboo mouthpiece, pink hemp haori with triangle patterns, geta sandals with white socks, full body, calm but intense expression, chibi style, background elements",
+        "source_type": "",
+        "source_title": "",
+        "source_character_name": "",
     },
     {
         "id":     "deku",
         "name":   "The Symbol's Heir",
         "series": "My Hero Academia",
-        "prompt": "deku from My Hero Academia, young hero in hero costume with freckled face, bunny-ear helmet raised, armored gloves with support items, smash energy swirling around fists, determined expression, full body",
+        "prompt": "Coloring book page of Deku from My Hero Academia, young hero in hero costume with freckled face, bunny-ear helmet raised, armored gloves with support items. Smash energy depicted as outlines swirling around fists, determined expression. Full body, bold clean line art, no shading, white background., companion animal, Art Nouveau",
+        "source_type": "",
+        "source_title": "",
+        "source_character_name": "",
     },
     {
         "id":     "eren",
         "name":   "The Freedom Seeker",
         "series": "Attack on Titan",
         "prompt": "anime young man with short dark brown hair tied back with a bandage, Survey Corps uniform and ODM gear, titan steam energy radiating from body, fierce burning green eyes, full body",
+        "source_type": "",
+        "source_title": "",
+        "source_character_name": "",
     },
     {
         "id":     "sung_jinwoo",
         "name":   "The Shadow Monarch",
         "series": "Solo Leveling",
         "prompt": "powerful anime hunter with short dark hair and cold purple eyes, long monarch coat with detailed silver trim and patterns, shadow army silhouettes outlined behind him, ruler's aura, full body",
+        "source_type": "",
+        "source_title": "",
+        "source_character_name": "",
     },
     {
         "id":     "rem",
         "name":   "The Blue Maid",
         "series": "Re:Zero",
         "prompt": "rem from Re:Zero, maid with short hair covering one eye, maid uniform with white apron and headdress, morning star flail weapon in hand, determined gentle expression, full body",
+        "source_type": "",
+        "source_title": "",
+        "source_character_name": "",
     },
     {
         "id":     "fushiguro",
         "name":   "The Shadow Summoner",
         "series": "Jujutsu Kaisen",
         "prompt": "Adult coloring book page, line art only, absolutely zero fills anywhere. Character: fushiguro from Jujutsu Kaisen. Full body, centered, pure white background. Draw ONLY black outlines — every single area inside the outlines must remain pure white and empty for coloring. CRITICAL rules that must never be broken: (1) hair must be drawn as individual strands or line details — NEVER filled solid or gray, (2) boots, shoes and dark clothing must be outlined shapes with interior details — NEVER filled, (3) zero black fills, zero gray fills, zero shading, zero gradients anywhere on the image. Style reference: Johanna Basford coloring book — bold clean outlines, all interior areas white. 300 DPI, high contrast line art, ready to color.",
+        "source_type": "",
+        "source_title": "",
+        "source_character_name": "",
     },
     {
         "id":     "nobara",
         "name":   "The Nail Witch",
         "series": "Jujutsu Kaisen",
         "prompt": "anime girl with brown hair in a side bun and confident dark eyes, dark sorcerer uniform, holding a large hammer over one shoulder with iron nails in other hand, fierce grin, full body",
+        "source_type": "",
+        "source_title": "",
+        "source_character_name": "",
     },
     {
         "id":     "loid",
         "name":   "The Master Spy",
         "series": "Spy x Family",
-        "prompt": "tall elegant anime man with swept-back blonde hair and calm grey eyes, fitted dark suit with tie, one hand adjusting collar, spy gadgets subtly visible, composed professional expression, full body",
+        "prompt": "tall elegant anime man with swept-back blonde hair and calm grey eyes, fitted dark suit with tie, one hand adjusting collar, spy gadgets subtly visible, composed professional expression, full body, thick outlines, Mandala-infused",
+        "source_type": "",
+        "source_title": "",
+        "source_character_name": "",
     },
     {
         "id":     "frieren",
         "name":   "The Elven Wanderer",
         "series": "Frieren: Beyond Journey's End",
         "prompt": "anime elf girl with very long silver hair and large pointy ears, worn travel cloak over old-fashioned mage robes, holding an ancient staff, sleepy calm expression, full body",
+        "source_type": "",
+        "source_title": "",
+        "source_character_name": "",
     },
     {
         "id":     "thorfinn",
         "name":   "The Viking Wanderer",
         "series": "Vinland Saga",
         "prompt": "young anime Viking man with short blonde hair and blue eyes, Norse-inspired layered travel clothes with fur trim, dual short daggers at his sides, weathered determined expression, full body",
+        "source_type": "",
+        "source_title": "",
+        "source_character_name": "",
     },
     {
         "id":     "kafka",
         "name":   "The Kaiju Defender",
         "series": "Kaiju No. 8",
         "prompt": "anime man in monster-defense force uniform mid-transformation, one arm becoming a massive armored kaiju limb with spikes, other arm still human, number 8 glowing on chest, full body",
+        "source_type": "",
+        "source_title": "",
+        "source_character_name": "",
     },
     {
         "id":     "armin",
         "name":   "The Young Tactician",
         "series": "Attack on Titan",
         "prompt": "young anime soldier with short blonde hair framing a thoughtful face, Survey Corps uniform, holding an open map in one hand, expression calm and calculating, full body",
+        "source_type": "",
+        "source_title": "",
+        "source_character_name": "",
     },
     {
         "id":     "himmel",
         "name":   "The Legendary Hero",
         "series": "Frieren: Beyond Journey's End",
         "prompt": "handsome anime hero with flowing blonde hair, classic plate armor with a white cape, longsword raised in a noble pose, radiant confident smile, full body",
+        "source_type": "",
+        "source_title": "",
+        "source_character_name": "",
     },
     {
         "id":     "stark",
         "name":   "The Reluctant Warrior",
         "series": "Frieren: Beyond Journey's End",
         "prompt": "young anime warrior with short spiky red-brown hair, fur-lined cape over battle clothes, massive axe resting on shoulder, nervous yet determined expression, full body",
+        "source_type": "",
+        "source_title": "",
+        "source_character_name": "",
     },
     {
         "id":     "aki",
         "name":   "The Devil's Contractor",
         "series": "Chainsaw Man",
         "prompt": "aki hayakawa from Chainsaw Man, tall young man with long hair tied in a top-knot, Public Safety uniform suit, katana drawn with fox devil spirit energy swirling around the blade, stoic expression, full body",
+        "source_type": "",
+        "source_title": "",
+        "source_character_name": "",
     },
     {
         "id":     "aqua",
         "name":   "The Water Goddess",
         "series": "KonoSuba",
         "prompt": "Adult coloring book page, line art only, absolutely zero fills anywhere. Character: aqua from KonoSuba. Full body, centered, pure white background. Draw ONLY black outlines — every single area inside the outlines must remain pure white and empty for coloring. CRITICAL rules that must never be broken: (1) hair must be drawn as individual strands or line details — NEVER filled solid or gray, (2) boots, shoes and dark clothing must be outlined shapes with interior details — NEVER filled, (3) zero black fills, zero gray fills, zero shading, zero gradients anywhere on the image. Style reference: Johanna Basford coloring book — bold clean outlines, all interior areas white. 300 DPI, high contrast line art, ready to color.",
+        "source_type": "",
+        "source_title": "",
+        "source_character_name": "",
     },
     {
         "id":     "gabimaru",
         "name":   "The Hollow Ninja",
         "series": "Hell's Paradise",
         "prompt": "anime ninja with short white-grey hair and cold empty eyes, torn prisoner clothes with rope remnants on wrists, white hot flames igniting from both fists, emotionless stance, full body",
+        "source_type": "",
+        "source_title": "",
+        "source_character_name": "",
     },
     {
         "id":     "yuzuriha",
         "name":   "The Thread Kunoichi",
         "series": "Hell's Paradise",
         "prompt": "yuzuriha from Hell's Paradise, kunoichi woman with long wavy hair tied loosely, traditional ninja attire with layered robes and a wide sash, crimson thread weapons extended from fingers in a flowing arc, confident smile, full body",
+        "source_type": "",
+        "source_title": "",
+        "source_character_name": "",
     },
     {
         "id":     "david",
         "name":   "The Cyberpunk Soldier",
         "series": "Cyberpunk: Edgerunners",
         "prompt": "anime young man in a futuristic cyberpunk city outfit, chrome cyborg implants running up both arms, casual jacket with Arasaka logo torn off, intense determined eyes, full body",
+        "source_type": "",
+        "source_title": "",
+        "source_character_name": "",
     },
     {
         "id":     "okarun",
         "name":   "The Spirit-Touched Boy",
         "series": "Dandadan",
         "prompt": "anime high school boy with short dark hair and round glasses, school uniform, supernatural spirit energy swirling around his body, frightened but resolute expression, full body",
+        "source_type": "",
+        "source_title": "",
+        "source_character_name": "",
     },
     {
         "id":     "momo",
         "name":   "The Spirit-Chaser",
         "series": "Dandadan",
         "prompt": "anime girl with dark wavy hair and determined eyes, school uniform, supernatural turbo-granny ghostly energy rising around her, brave excited expression, full body",
+        "source_type": "",
+        "source_title": "",
+        "source_character_name": "",
     },
     {
         "id":     "group_thorfinn_eren",
         "name":   "Groupe: The Viking Wanderer + The Freedom Seeker",
         "series": "",
         "prompt": "thorfinn from Vinland Saga alongside eren yeager from Attack on Titan, side by side, thorfinn in Norse travel clothes with dual daggers, eren in Survey Corps uniform with ODM gear, both walking forward with determined expressions, full body",
+        "source_type": "",
+        "source_title": "",
+        "source_character_name": "",
     },
     {
         "id":     "group_frieren_gabimaru",
         "name":   "Groupe: The Elven Wanderer + The Hollow Ninja",
         "series": "",
         "prompt": "frieren from Frieren Beyond Journey's End alongside gabimaru from Hell's Paradise, side by side, frieren in her travel cloak holding an ancient staff with long flowing silver hair, gabimaru in torn prisoner robes with white flames around fists, both standing calm, full body",
+        "source_type": "",
+        "source_title": "",
+        "source_character_name": "",
     },
     {
         "id":     "group_gojo_levi_nezuko",
         "name":   "Groupe: The Boundless Sorcerer + Humanity's Strongest + The Demon Sister",
         "series": "",
         "prompt": "Adult coloring book page, line art only, absolutely zero fills anywhere. Character: group_gojo_levi_nezuko, dynamic battle scene, companion animal, shadow army silhouettes. Full body, centered, pure white background. Draw ONLY black outlines — every single area inside the outlines must remain pure white and empty for coloring. CRITICAL rules that must never be broken: (1) hair must be drawn as individual strands or line details — NEVER filled solid or gray, (2) boots, shoes and dark clothing must be outlined shapes with interior details — NEVER filled, (3) zero black fills, zero gray fills, zero shading, zero gradients anywhere on the image. Style reference: Johanna Basford coloring book — bold clean outlines, all interior areas white. 300 DPI, high contrast line art, ready to color.",
+        "source_type": "",
+        "source_title": "",
+        "source_character_name": "",
+    },
+    {
+        "id":     "pika",
+        "name":   "pikashu",
+        "series": "",
+        "prompt": "character identity: pikashu, pika, reference source: anime / pikashu / pokemon, keep visual identity and signature traits consistent with this reference character, playing with the ball, manga style",
+        "source_type": "anime",
+        "source_title": "pikashu",
+        "source_character_name": "pokemon",
     }
 ]
 
@@ -213,24 +314,7 @@ PAGE_SEQUENCE = [
 
 # ── KDP Metadata ────────────────────────────────────────────────────────────────
 
-KDP_METADATA = {
-    "description": "The new legends of anime, now ready to color.\n\nModern Legends brings the heroes of today's most celebrated anime series into your hands — as 24 pages of crisp, print-ready line art. Gojo, Levi, Nezuko, Deku, Sung Jin-Woo, and 19 more fan-favorite archetypes, each rendered as a full-page coloring page.\n\nBuilt for the dads who binge Jujutsu Kaisen after the kids go to bed — and for the kids who are just starting their anime journey.\n\n• 24 full-page coloring pages (8.5\" × 11\")\n• Original fictional archetypes from the modern anime era (Jujutsu Kaisen, Attack on Titan, Demon Slayer, My Hero Academia, Solo Leveling, Frieren, and more)\n• Bold, clean line art — no gray fills, no shading, all-white interiors\n• Includes a duo scene: The Viking Wanderer + The Freedom Seeker\n• Blank back pages — no bleed-through\n\nShare the moment. Pass the colored pencils. Start a new legend together.",
-    "keywords": [
-        "anime coloring book adults",
-        "jujutsu kaisen coloring book",
-        "demon slayer coloring book",
-        "modern anime coloring book",
-        "attack on titan coloring book",
-        "anime coloring book for kids and adults",
-        "dad and kids coloring book anime"
-    ],
-    "categories": [
-        "JUVENILE NONFICTION / Activity Books / Coloring",
-        "GAMES & ACTIVITIES / Coloring Books"
-    ],
-    "price_usd": 8.99,
-    "amazon_asin": ""
-}
+KDP_METADATA = {}
 
 # ── Title-page layout ─────────────────────────────────────────────────────────
 

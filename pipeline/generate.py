@@ -26,6 +26,7 @@ Get your API key at: https://aistudio.google.com/apikey
 """
 
 import argparse
+import hashlib
 import importlib.util
 import os
 import pathlib
@@ -46,7 +47,7 @@ _ROOT = pathlib.Path(__file__).parent.parent
 if str(_ROOT) not in sys.path:
     sys.path.insert(0, str(_ROOT))
 
-from pipeline.prompt import build_prompt
+from pipeline.prompt import build_prompt, compact_character_description
 
 # Gemini model used for image generation
 IMAGE_MODEL = "gemini-2.5-flash-image"
@@ -182,7 +183,11 @@ def run(book_name: str, filter_id: str | None, dry_run: bool, force: bool = Fals
             is_coloring = (story_format == "coloring")
             full_prompt = build_story_prompt(story_base=story_base, scene=item.get("image_prompt", ""), is_coloring=is_coloring)
         else:
-            full_prompt = build_prompt(description=raw_prompt)
+            compact_prompt = compact_character_description(raw_prompt)
+            prompt_hash = hashlib.sha1(compact_prompt.encode("utf-8")).hexdigest()[:12]
+            print(f"         Prompt id: {item_id} sha1:{prompt_hash}")
+            print(f"         Prompt core: {compact_prompt[:220]}")
+            full_prompt = build_prompt(description=compact_prompt)
 
         if dry_run:
             print(f"         PROMPT: {full_prompt[:120]}...")
@@ -200,7 +205,7 @@ def run(book_name: str, filter_id: str | None, dry_run: bool, force: bool = Fals
                 # --- Post-generation validation & auto-cleanup ---
                 try:
                     from PIL import Image
-                    from pipeline.clean import strip_colors, remove_black_fills, auto_clean_corners
+                    from pipeline.clean import strip_colors, remove_black_fills, remove_gray_fills_preserve_edges, auto_clean_corners
                     
                     img = Image.open(out_path).convert("RGB")
                     is_contaminated = check_color_contamination(img)
@@ -215,6 +220,7 @@ def run(book_name: str, filter_id: str | None, dry_run: bool, force: bool = Fals
                     if dirty:
                         img = strip_colors(img, verbose=False)
                         img = remove_black_fills(img, verbose=False)
+                        img = remove_gray_fills_preserve_edges(img, verbose=False)
                         
                         if auto_clean:
                             img, corners = auto_clean_corners(img, verbose=False)

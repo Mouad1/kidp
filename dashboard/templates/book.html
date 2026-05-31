@@ -72,22 +72,20 @@
     <!-- ── Col 1: Character list ── -->
     <div class="space-y-3">
       <div class="bg-white border border-gray-200 rounded-xl overflow-hidden">
-        <div class="px-3 py-2.5 border-b border-gray-100 flex items-center justify-between">
+        <div class="px-3 py-2.5 border-b border-gray-100 space-y-2">
           <h2 class="font-semibold text-xs text-gray-600 uppercase tracking-wide">
             Personnages <span id="char-count" class="text-gray-400 font-normal normal-case"></span>
           </h2>
           <div class="flex gap-1.5">
             <button onclick="openGroupBuilder()"
-                    class="text-xs bg-gray-100 text-gray-700 rounded-md px-2 py-1 hover:bg-gray-200">
+                    class="flex-1 text-xs bg-gray-100 text-gray-700 rounded-md px-2 py-1.5 hover:bg-gray-200 whitespace-nowrap">
               + Groupe
             </button>
-              <button onclick="openImportModal()" class="bg-teal-500 hover:bg-teal-600 text-white px-3 py-1.5 rounded-lg text-sm font-bold shadow transition-colors flex items-center gap-1">
-                ➕ Importer
-              </button>
-              <button onclick="addCharacterRow()" class="bg-indigo-600 hover:bg-indigo-700 text-white px-3 py-1.5 rounded-lg text-sm font-bold shadow transition-colors flex items-center gap-1">
-                ➕ Ajouter
-              </button>
-            </div>
+            <button onclick="openImportModal()"
+                    class="flex-1 text-xs bg-teal-500 hover:bg-teal-600 text-white px-2 py-1.5 rounded-md transition-colors whitespace-nowrap">
+              Importer
+            </button>
+          </div>
           </div>
           <div class="px-3 pb-2">
             <button onclick="addCharInline()"
@@ -112,8 +110,8 @@
         </div>
 
         <!-- Solo Panel -->
-        <div id="pb-solo" class="hidden flex flex-col h-full">
-          <div id="pb-solo-content" class="flex-1 overflow-y-auto"></div>
+        <div id="pb-solo" class="hidden flex-1 flex flex-col min-h-0">
+          <div id="pb-solo-content" class="flex-1 overflow-y-auto min-h-0"></div>
           <div id="tag-gallery-panel" class="hidden border-t border-gray-200 bg-gray-50 p-3 shrink-0">
             <div class="flex items-center justify-between mb-2">
               <span id="tg-label" class="text-xs font-semibold text-gray-600"></span>
@@ -122,7 +120,8 @@
             </div>
             <img id="tg-img" src="" alt="Tag example"
                  class="w-full rounded-lg border border-gray-200 bg-white max-h-48 object-contain"
-                 onerror="this.parentElement.innerHTML='&lt;p class=&quot;text-xs text-gray-400&quot;&gt;No example yet. Run: &lt;code&gt;python3 pipeline/generate_tag_examples.py&lt;/code&gt;&lt;/p&gt;'" />
+                 onerror="this.hidden=true; document.getElementById('tg-error').classList.remove('hidden')" />
+            <p id="tg-error" class="hidden text-xs text-gray-400">Image non disponible — lance : <code>python3 pipeline/generate_tag_examples.py</code></p>
           </div>
         </div>
 
@@ -131,7 +130,7 @@
 
       </div>
 
-      <!-- ── Col 3: Sequence & Image Generation ── -->
+      <!-- ── Col 3: Config & Generation ── -->
       <div class="space-y-3">
 
         <!-- Metadata + Config card -->
@@ -165,46 +164,27 @@
           </button>
         </div>
 
-        <div class="bg-white border border-gray-200 rounded-xl overflow-hidden flex flex-col" style="height:calc(100vh - 110px);">
-          <div class="px-3 py-2.5 border-b border-gray-100 flex items-center justify-between shrink-0">
-            <h2 class="font-semibold text-xs text-gray-600 uppercase tracking-wide">
-              Page Sequence
-            </h2>
-            <div class="text-[10px] text-gray-400 font-medium">
-              <span id="sequence-count" class="text-gray-600 font-bold">0</span> pages<br/>
-              <span id="sequence-missing" class="text-red-400 font-bold block text-right mt-0.5">0 manquantes</span>
-            </div>
-          </div>
-
-          <div class="p-2 border-b border-gray-100 bg-gray-50 flex gap-2 shrink-0">
+        <!-- Generation + Console card -->
+        <div class="bg-white border border-gray-200 rounded-xl overflow-hidden">
+          <div class="p-2 flex gap-2 items-center">
             <button onclick="runAction('generate','{{ book_name }}')"
                     class="flex-1 bg-indigo-600 text-white text-xs font-semibold py-2 rounded-lg hover:bg-indigo-700 shadow-sm">
-              🤖 Generate all missing
+              🤖 Générer les images manquantes
             </button>
-            <div class="w-8 flex items-center justify-center">
+            <div class="w-6 flex items-center justify-center shrink-0">
               <div id="loading-spinner" class="hidden w-4 h-4 border-2 border-indigo-400 border-t-indigo-600 rounded-full spin"></div>
             </div>
           </div>
-
           <!-- Console Output -->
-          <div id="console-wrapper" class="hidden flex-col h-48 border-b border-gray-200 shrink-0 bg-gray-900 relative">
+          <div id="console-wrapper" class="hidden flex-col border-t border-gray-200 bg-gray-900">
             <div class="flex justify-between items-center text-[10px] px-2 py-1 bg-gray-800 text-gray-400">
               <span id="console-title" class="font-mono">Console</span>
               <button onclick="closeConsole()" class="hover:text-white">✕ Fermer</button>
             </div>
-            <pre id="stream-output" class="flex-1 p-2 text-[10px] font-mono text-green-400 overflow-y-auto whitespace-pre-wrap leading-tight"></pre>
+            <pre id="stream-output" class="p-2 text-[10px] font-mono text-green-400 overflow-y-auto whitespace-pre-wrap leading-tight" style="max-height:300px;"></pre>
           </div>
-
-          <!-- Sequence List (drag & drop) -->
-          <div class="col-scroll flex-1 p-2 relative bg-gray-50" style="min-height: 0;">
-            <div class="absolute inset-0 overflow-y-auto p-2">
-              <div class="space-y-1.5" id="sequence-list">
-                <!-- Re-rendered by JS -->
-              </div>
-            </div>
-          </div>
-
         </div>
+
       </div>
     </main>
 
@@ -221,7 +201,7 @@
     window.activeSoloIndex = null;
 
     const PROMPT_TEMPLATE = (
-      "Provide Professional adult coloring book page of {cp}, " +
+      "Create a professional adult coloring book page. Character: {cp}. " +
       "full body centered, pure white background. " +
       "Thick, bold black vector-style outlines only. " +
       "CRITICAL: zero black fills, zero solid black areas anywhere on the body or clothing — " +
@@ -230,10 +210,110 @@
       "High contrast, clean line art, 300 DPI quality, minimalist style ready for coloring."
     );
 
+    function compactCharacterDescriptionText(raw) {
+      let s = String(raw || '').trim();
+      if (!s) return '';
+
+      const wrappers = [
+        'Provide Professional adult coloring book page of ',
+        'Create a professional adult coloring book page. ',
+        'Character: '
+      ];
+
+      let changed = true;
+      while (changed) {
+        changed = false;
+        for (const pref of wrappers) {
+          if (s.startsWith(pref)) {
+            s = s.slice(pref.length).trim();
+            changed = true;
+          }
+        }
+      }
+
+      const lower = s.toLowerCase();
+      const cutMarkers = [
+        'full body centered, pure white background.',
+        'critical: zero black fills',
+        'thick, bold black vector-style outlines only.',
+        'high contrast, clean line art, 300 dpi quality'
+      ];
+      let cutIdx = -1;
+      for (const marker of cutMarkers) {
+        const idx = lower.indexOf(marker);
+        if (idx !== -1) cutIdx = cutIdx === -1 ? idx : Math.min(cutIdx, idx);
+      }
+      if (cutIdx > 0) {
+        s = s.slice(0, cutIdx).trim().replace(/,+$/g, '');
+      }
+
+      s = s.replace(/\bProvide Professional adult coloring book page of\b/gi, '');
+      s = s.replace(/\s{2,}/g, ' ').trim().replace(/^[,\s]+|[,\s]+$/g, '');
+
+      const seen = new Set();
+      const deduped = [];
+      for (const part of s.split(',').map(p => p.trim()).filter(Boolean)) {
+        const key = part.toLowerCase();
+        if (seen.has(key)) continue;
+        seen.add(key);
+        deduped.push(part);
+      }
+      return deduped.join(', ');
+    }
+
     let soloState = {
       description: '', styleTags: [], poseTags: [],
       elementTags: [], themeTags: [], extraNotes: ''
     };
+    let applyRegenerateInFlight = false;
+
+    function _soloStateStorageKey(charId) {
+      return `pb-state:${BOOK_NAME}:${charId}`;
+    }
+
+    function _defaultSoloState(description) {
+      return {
+        description: compactCharacterDescriptionText(description),
+        styleTags: [],
+        poseTags: [],
+        elementTags: [],
+        themeTags: [],
+        extraNotes: ''
+      };
+    }
+
+    function loadSoloStateForCharacter(character) {
+      const charId = (character?.id || '').trim();
+      const fallback = _defaultSoloState(character?.prompt || '');
+      if (!charId) return fallback;
+      try {
+        const raw = localStorage.getItem(_soloStateStorageKey(charId));
+        if (!raw) return fallback;
+        const parsed = JSON.parse(raw);
+        return {
+          description: compactCharacterDescriptionText(parsed.description || fallback.description),
+          styleTags: Array.isArray(parsed.styleTags) ? parsed.styleTags : [],
+          poseTags: Array.isArray(parsed.poseTags) ? parsed.poseTags : [],
+          elementTags: Array.isArray(parsed.elementTags) ? parsed.elementTags : [],
+          themeTags: Array.isArray(parsed.themeTags) ? parsed.themeTags : [],
+          extraNotes: parsed.extraNotes || ''
+        };
+      } catch (_err) {
+        return fallback;
+      }
+    }
+
+    function persistActiveSoloState() {
+      if (window.activeSoloIndex === null || window.activeSoloIndex === undefined) return;
+      const chars = collectCharacters();
+      const charId = (chars[window.activeSoloIndex]?.id || '').trim();
+      if (!charId) return;
+      try {
+        localStorage.setItem(_soloStateStorageKey(charId), JSON.stringify(soloState));
+      } catch (_err) {
+        // Ignore localStorage write failures (private mode/quota).
+      }
+    }
 
     let groupState = {
       charDescs: {},
@@ -242,6 +322,7 @@
       groupDynamic: '',
       extraNotes: ''
     };
+    window._imgCacheBust = Date.now();
 
     // ── Prompt Builder System ────────────────────────────────────────────────────
 
@@ -250,21 +331,14 @@
       builderMode = 'solo';
       const chars = collectCharacters();
       const c = chars[i];
-      soloState = {
-        description: c.prompt || '',
-        styleTags: [], poseTags: [], elementTags: [], themeTags: [],
-        extraNotes: ''
-      };
+      soloState = loadSoloStateForCharacter(c);
       renderCharacters(chars); 
       renderSoloPanel(c);
     }
 
     function getCharacterImageUrl(charId) {
-      if (!configData?.page_sequence) return '';
-      const entry = configData.page_sequence.find(e =>
-        e.file.replace(/^[^_]+_/, '').replace(/\.\w+$/, '') === charId
-      );
-      return entry ? `/images/${BOOK_NAME}/${entry.file}` : '';
+      const file = getSequenceFileByCharId(charId) || getCanonicalFileForCharId(charId);
+      return file ? `/images/${BOOK_NAME}/${file}?v=${window._imgCacheBust}` : '';
     }
 
     function renderSoloPanel(character) {
@@ -284,16 +358,36 @@
             <p class="font-semibold text-sm">${esc(character.name || character.id)}</p>
             <p class="text-xs text-gray-400">${esc(character.id)}</p>
           </div>
-          <button onclick="applySoloPrompt()" class="text-xs bg-indigo-600 text-white rounded-lg px-4 py-2 hover:bg-indigo-700">
-            💾 Apply
+          <button id="pb-apply-btn" onclick="applySoloPrompt(this)" class="text-xs bg-indigo-600 text-white rounded-lg px-4 py-2 hover:bg-indigo-700">
+            🔄 Appliquer + Régénérer
           </button>
         </div>
         <div class="p-5 space-y-4">
+          <div class="border border-gray-200 rounded-lg p-3 bg-gray-50/60 space-y-2">
+            <p class="text-[11px] font-semibold text-gray-600 uppercase tracking-wide">Référence (optionnel)</p>
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-2">
+              <input type="text" placeholder="Type: anime/manga/film/série"
+                id="pb-source-type"
+                value="${esc(character.source_type || '')}"
+                class="w-full border border-gray-200 rounded px-2 py-1.5 text-xs focus:outline-none focus:ring-1 focus:ring-indigo-400"
+                oninput="updateActiveCharacterField('source_type', this.value); updateSoloPreview()" />
+              <input type="text" placeholder="Titre source: ex Naruto"
+                id="pb-source-title"
+                value="${esc(character.source_title || '')}"
+                class="w-full border border-gray-200 rounded px-2 py-1.5 text-xs focus:outline-none focus:ring-1 focus:ring-indigo-400"
+                oninput="updateActiveCharacterField('source_title', this.value); updateSoloPreview()" />
+              <input type="text" placeholder="Nom dans la source"
+                id="pb-source-character-name"
+                value="${esc(character.source_character_name || '')}"
+                class="w-full border border-gray-200 rounded px-2 py-1.5 text-xs focus:outline-none focus:ring-1 focus:ring-indigo-400"
+                oninput="updateActiveCharacterField('source_character_name', this.value); updateSoloPreview()" />
+            </div>
+          </div>
           <div>
             <label class="text-xs text-gray-500 block mb-1">Description physique <span class="text-gray-400">(sans noms de couleur)</span></label>
             <textarea id="pb-description" rows="3"
               class="w-full border border-gray-200 rounded-lg px-3 py-2 text-xs resize-y focus:outline-none focus:ring-2 focus:ring-indigo-500"
-              oninput="soloState.description=this.value; updateSoloPreview()">${esc(soloState.description)}</textarea>
+              oninput="soloState.description=this.value; persistActiveSoloState(); updateSoloPreview()">${esc(soloState.description)}</textarea>
           </div>
           ${renderTagSection('Style', 'style', soloState.styleTags, 'styleTags')}
           ${renderTagSection('Pose', 'pose', soloState.poseTags, 'poseTags')}
@@ -303,7 +397,7 @@
             <label class="text-xs text-gray-500 block mb-1">Notes supplémentaires</label>
             <textarea id="pb-extra" rows="2"
               class="w-full border border-gray-200 rounded-lg px-3 py-2 text-xs resize-y focus:outline-none focus:ring-2 focus:ring-indigo-500"
-              oninput="soloState.extraNotes=this.value; updateSoloPreview()"></textarea>
+              oninput="soloState.extraNotes=this.value; persistActiveSoloState(); updateSoloPreview()">${esc(soloState.extraNotes)}</textarea>
           </div>
           <div class="bg-gray-50 border border-gray-200 rounded-lg px-3 py-2 text-xs text-gray-500 flex items-center gap-2">
             ⛔ <span>Zero shading · Zero gray fills · Zero gradients · Zero black fills</span>
@@ -326,9 +420,10 @@
         return `<button type="button"
           data-tag="${esc(tag)}" data-key="${stateKey}"
           class="tag-pill px-2 py-1 text-xs rounded-full border transition-colors ${active
-            ? 'bg-indigo-600 text-white border-indigo-600'
+            ? 'bg-indigo-700 text-white border-indigo-700 ring-2 ring-indigo-200 font-semibold shadow-sm'
             : 'bg-white text-gray-600 border-gray-200 hover:border-indigo-400'}"
-        >${esc(tag)}</button>`;
+          aria-pressed="${active ? 'true' : 'false'}"
+        >${active ? '✓ ' : ''}${esc(tag)}</button>`;
       }).join('');
       return `
         <div>
@@ -344,14 +439,13 @@
           const tag = btn.dataset.tag;
           const key = btn.dataset.key;
           if (mode === 'solo') {
-            const idx = soloState[key].indexOf(tag);
-            if (idx === -1) soloState[key].push(tag);
-            else soloState[key].splice(idx, 1);
+            const isActive = soloState[key].includes(tag);
+            soloState[key] = isActive ? [] : [tag];
+            persistActiveSoloState();
             renderSoloPanel(collectCharacters()[window.activeSoloIndex]);
           } else {
-            const idx = groupState[key].indexOf(tag);
-            if (idx === -1) groupState[key].push(tag);
-            else groupState[key].splice(idx, 1);
+            const isActive = groupState[key].includes(tag);
+            groupState[key] = isActive ? [] : [tag];
             renderGroupPanel();
           }
           const cat = keyToCategory[key];
@@ -360,12 +454,32 @@
       });
     }
 
-    function buildSoloPromptText() {
-      const parts = [soloState.description.trim()];
+    function buildSoloCharacterDescription() {
+      const active = (window.activeSoloIndex !== null && window.activeSoloIndex !== undefined)
+        ? collectCharacters()[window.activeSoloIndex]
+        : null;
+      const identity = [active?.name, active?.id, active?.series].filter(Boolean).join(', ');
+      const refType = (document.getElementById('pb-source-type')?.value || active?.source_type || '').trim();
+      const refTitle = (document.getElementById('pb-source-title')?.value || active?.source_title || '').trim();
+      const refName = (document.getElementById('pb-source-character-name')?.value || active?.source_character_name || '').trim();
+      const referenceContext = [refType, refTitle, refName].filter(Boolean).join(' / ');
+
+      const parts = [];
+      if (identity) parts.push(`character identity: ${identity}`);
+      if (referenceContext) {
+        parts.push(`reference source: ${referenceContext}`);
+        parts.push('keep visual identity and signature traits consistent with this reference character');
+      }
+      const compactDescription = compactCharacterDescriptionText(soloState.description);
+      parts.push(compactDescription);
       if (soloState.extraNotes.trim()) parts.push(soloState.extraNotes.trim());
       [...soloState.styleTags, ...soloState.poseTags,
        ...soloState.elementTags, ...soloState.themeTags].forEach(t => parts.push(t));
-      const cp = parts.filter(Boolean).join(', ');
+      return parts.filter(Boolean).join(', ');
+    }
+
+    function buildSoloPromptText() {
+      const cp = buildSoloCharacterDescription();
       return PROMPT_TEMPLATE.replace('{cp}', cp);
     }
 
@@ -374,9 +488,156 @@
       if (el) el.textContent = buildSoloPromptText();
     }
 
-    function applySoloPrompt() {
+    function setApplyButtonState(btn, busy) {
+      if (!btn) return;
+      btn.disabled = busy;
+      if (busy) {
+        btn.classList.add('opacity-60', 'cursor-not-allowed', 'pointer-events-none');
+        btn.textContent = '⏳ Régénération...';
+      } else {
+        btn.classList.remove('opacity-60', 'cursor-not-allowed', 'pointer-events-none');
+        btn.textContent = '🔄 Appliquer + Régénérer';
+      }
+    }
+
+    function updateActiveCharacterField(field, value) {
+      if (window.activeSoloIndex === null || window.activeSoloIndex === undefined) return;
+      const idx = window.activeSoloIndex;
+      const cards = document.querySelectorAll('#characters-list .char-card');
+      const card = cards[idx];
+      const trimmed = value || '';
+
+      if (card) {
+        const hidden = card.querySelector(`[data-field="${field}"]`);
+        if (hidden) hidden.value = trimmed;
+      }
+      if (configData?.characters?.[idx]) {
+        configData.characters[idx][field] = trimmed;
+      }
+    }
+
+    function getSequenceFileByCharId(charId) {
+      if (!configData?.page_sequence || !charId) return '';
+      const rawKey = String(charId).trim();
+      const normalizedCharId = normalizeCharKey(rawKey);
+
+      const exact = configData.page_sequence.find(e =>
+        e.file.replace(/^[^_]+_/, '').replace(/\.png$/i, '') === rawKey
+      );
+      if (exact?.file) return exact.file;
+
+      const normalized = configData.page_sequence.find(e =>
+        normalizeCharKey(e.file.replace(/^[^_]+_/, '').replace(/\.png$/i, '')) === normalizedCharId
+      );
+      return normalized?.file || '';
+    }
+
+    function getCanonicalFileForCharId(charId) {
+      if (!charId) return '';
+      const prefix = BOOK_NAME.split('-')[0];
+      return `${prefix}_${charId}.png`;
+    }
+
+    function normalizeCharKey(raw) {
+      if (!raw) return '';
+      let key = String(raw).trim().toLowerCase();
+      key = key.replace(/\.png$/i, '');
+      key = key.replace(/_raw$/i, '');
+      key = key.replace(/_clean$/i, '');
+      key = key.replace(/_portrait$/i, '');
+      return key;
+    }
+
+    function resolveCharIdFromFilename(filename) {
+      const stem = String(filename || '').replace(/^[^_]+_/, '').replace(/\.png$/i, '');
+      const normalizedStem = normalizeCharKey(stem);
+      const chars = collectCharacters();
+
+      const strict = chars.find(c => String(c.id || '').trim() === stem);
+      if (strict?.id) return strict.id;
+
+      const exact = chars.find(c => normalizeCharKey(c.id) === normalizeCharKey(stem));
+      if (exact?.id) return exact.id;
+
+      const normalized = chars.find(c => normalizeCharKey(c.id) === normalizedStem);
+      if (normalized?.id) return normalized.id;
+
+      return normalizedStem;
+    }
+
+    function refreshCharImagesInView(charId) {
+      const file = getSequenceFileByCharId(charId) || getCanonicalFileForCharId(charId);
+      if (!file || !charId) return;
+      const stamp = Date.now();
+      window._imgCacheBust = stamp;
+      const plain = `/images/${BOOK_NAME}/${file}`;
+      const nextSrc = `${plain}?v=${stamp}`;
+
+      // Sequence thumbnail (right column)
+      const targetNorm = normalizeCharKey(charId);
+      document.querySelectorAll('#sequence-list [data-char-id]').forEach(card => {
+        const cid = card.getAttribute('data-char-id') || '';
+        if (normalizeCharKey(cid) === targetNorm) {
+          const img = card.querySelector('img');
+          if (img) img.src = nextSrc;
+        }
+      });
+
+      // Repaint the whole sequence list with the new cache-bust token.
+      if (configData?.page_sequence) {
+        renderSequence(configData.page_sequence);
+      }
+
+      // Prompt-builder preview (middle column)
+      if (window.activeSoloIndex !== null && window.activeSoloIndex !== undefined) {
+        const chars = collectCharacters();
+        const activeId = (chars[window.activeSoloIndex]?.id || '').trim();
+        if (activeId === charId) {
+          const soloImg = document.querySelector('#pb-solo-content img');
+          if (soloImg) soloImg.src = nextSrc;
+          const activeCharacter = chars[window.activeSoloIndex];
+          if (activeCharacter) {
+            renderSoloPanel(activeCharacter);
+          }
+        }
+      }
+
+      // Fallback for any other image still bound to this file path.
+      document.querySelectorAll('img').forEach(img => {
+        if (!img.src) return;
+        if (img.src.includes(plain)) img.src = nextSrc;
+      });
+    }
+
+    async function refreshViewAfterGeneration(charId) {
+      // Re-fetch config and repaint the UI in-place (no full page reload).
+      window._imgCacheBust = Date.now();
+      await loadConfig();
+
+      const chars = collectCharacters();
+      const idx = chars.findIndex(c => normalizeCharKey(c.id) === normalizeCharKey(charId));
+      if (idx >= 0) {
+        selectCharacter(idx);
+      }
+
+      // One immediate + one delayed pass improves reliability when disk write and
+      // browser revalidation complete just after SSE [DONE].
+      refreshCharImagesInView(charId);
+      setTimeout(() => refreshCharImagesInView(charId), 500);
+    }
+
+    async function applySoloPrompt(btn) {
+      if (applyRegenerateInFlight) return;
       if (window.activeSoloIndex === null) return;
-      const prompt = buildSoloPromptText();
+      const chars = collectCharacters();
+      const selected = chars[window.activeSoloIndex];
+      const charId = (selected?.id || '').trim();
+      if (!charId) {
+        showToast('❌ Ajoute un ID personnage avant de générer');
+        return;
+      }
+
+      const prompt = buildSoloCharacterDescription();
       const cards = document.querySelectorAll('#characters-list .char-card');
       const card = cards[window.activeSoloIndex];
       if (card) {
@@ -385,7 +646,74 @@
           configData.characters[window.activeSoloIndex].prompt = prompt;
         }
       }
-      showToast('✅ Prompt appliqué au personnage');
+      persistActiveSoloState();
+
+      applyRegenerateInFlight = true;
+      setApplyButtonState(btn, true);
+
+      const payload = {
+        title:         document.getElementById('cfg-title')?.value.trim() || configData?.title || '',
+        subtitle:      document.getElementById('cfg-subtitle')?.value.trim() || configData?.subtitle || '',
+        author:        document.getElementById('cfg-author')?.value.trim() || configData?.author || '',
+        testpen:       configData?.testpen,
+        images_folder: configData?.images_folder,
+        characters:    collectCharacters(),
+        page_sequence: configData?.page_sequence || [],
+      };
+      try {
+        const saveRes = await fetch(`/api/book/${BOOK_NAME}/config`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload),
+        });
+        if (!saveRes.ok) {
+          let details = '';
+          try {
+            const err = await saveRes.json();
+            details = err?.detail ? `: ${err.detail}` : '';
+          } catch (_err) {
+            details = '';
+          }
+          showToast(`❌ Sauvegarde impossible${details}`);
+          return;
+        }
+
+        startStream(
+          `/stream/generate/${BOOK_NAME}?char_id=${encodeURIComponent(charId)}&force=true`,
+          `🔄 Regenerating ${charId}`,
+          {
+            reloadOnDone: false,
+            onDone: (hadError) => {
+              refreshViewAfterGeneration(charId)
+                .then(() => {
+                  if (hadError) {
+                    showToast('⚠️ Régénération terminée avec avertissement, affichage rafraîchi');
+                  } else {
+                    showToast('✅ Image régénérée et affichage mis à jour');
+                  }
+                })
+                .catch(() => {
+                  // Fallback to direct image rebinding if config refresh fails.
+                  refreshCharImagesInView(charId);
+                  if (hadError) {
+                    showToast('⚠️ Terminé avec avertissement, rafraîchissement partiel');
+                  } else {
+                    showToast('✅ Image régénérée (rafraîchissement partiel)');
+                  }
+                });
+            },
+            onFinally: () => {
+              applyRegenerateInFlight = false;
+              setApplyButtonState(btn, false);
+            }
+          }
+        );
+        showToast('✅ Prompt appliqué — régénération lancée');
+      } catch (_err) {
+        showToast('❌ Erreur réseau: impossible de lancer la génération');
+        applyRegenerateInFlight = false;
+        setApplyButtonState(btn, false);
+      }
     }
 
     function openGroupBuilder() {
@@ -409,7 +737,7 @@
         const checked = groupState.charIds.includes(c.id);
         const descVal = groupState.charDescs[c.id] || '';
         return `
-          <div class="border border-gray-100 rounded-lg p-3 space-y-2">
+          <div class="border rounded-lg p-3 space-y-2 transition-colors ${checked ? 'border-indigo-300 bg-indigo-50/70' : 'border-gray-100'}">
             <label class="flex items-center gap-2 cursor-pointer">
               <input type="checkbox" value="${esc(c.id)}" ${checked ? 'checked' : ''}
                 onchange="toggleGroupChar('${esc(c.id)}', this.checked)"
@@ -429,9 +757,9 @@
         return `<button type="button"
           onclick="groupState.groupDynamic = groupState.groupDynamic === '${esc(d)}' ? '' : '${esc(d)}'; renderGroupPanel()"
           class="px-2 py-1 text-xs rounded-full border transition-colors ${active
-            ? 'bg-indigo-600 text-white border-indigo-600'
+            ? 'bg-indigo-700 text-white border-indigo-700 ring-2 ring-indigo-200 font-semibold shadow-sm'
             : 'bg-white text-gray-600 border-gray-200 hover:border-indigo-400'}"
-        >${esc(d)}</button>`;
+        >${active ? '✓ ' : ''}${esc(d)}</button>`;
       }).join('');
 
       panel.innerHTML = `
@@ -483,17 +811,32 @@
       renderGroupPanel();
     }
 
-    function buildGroupPromptText() {
+    function buildGroupCharacterDescription() {
       const descs = groupState.charIds
         .map(id => (groupState.charDescs[id] || '').trim())
         .filter(Boolean);
       if (descs.length === 0) return '(sélectionne des personnages avec descriptions)';
       const desc = descs.join(' alongside ');
+      const chars = collectCharacters();
+      const refs = groupState.charIds
+        .map(id => chars.find(c => c.id === id))
+        .filter(Boolean)
+        .map(c => {
+          const parts = [c.source_type, c.source_title, c.source_character_name].filter(Boolean);
+          if (!parts.length) return '';
+          return `${c.name || c.id}: ${parts.join(' / ')}`;
+        })
+        .filter(Boolean);
       const parts = [desc];
+      if (refs.length) parts.push(`reference context: ${refs.join(' ; ')}`);
       if (groupState.extraNotes.trim()) parts.push(groupState.extraNotes.trim());
       if (groupState.groupDynamic) parts.push(groupState.groupDynamic);
       [...groupState.styleTags, ...groupState.elementTags, ...groupState.themeTags].forEach(t => parts.push(t));
-      const cp = parts.filter(Boolean).join(', ');
+      return parts.filter(Boolean).join(', ');
+    }
+
+    function buildGroupPromptText() {
+      const cp = buildGroupCharacterDescription();
       return PROMPT_TEMPLATE.replace('{cp}', cp);
     }
 
@@ -507,7 +850,7 @@
         showToast('❌ Sélectionne au moins 2 personnages');
         return;
       }
-      const prompt = buildGroupPromptText();
+      const prompt = buildGroupCharacterDescription();
       if (prompt.startsWith('(sélectionne')) {
         showToast('❌ Ajoute une description pour chaque personnage sélectionné');
         return;
@@ -527,7 +870,15 @@
       const filename = `${sanitizedBookName}_${groupId}.png`;
 
       // Ajouter dans CHARACTERS
-      chars.push({ id: groupId, name: `Groupe: ${label}`, series: '', prompt });
+      chars.push({
+        id: groupId,
+        name: `Groupe: ${label}`,
+        series: '',
+        prompt,
+        source_type: '',
+        source_title: '',
+        source_character_name: '',
+      });
       renderCharacters(chars);
 
       // Ajouter dans PAGE_SEQUENCE
@@ -631,6 +982,9 @@
         <input type="hidden" data-field="name"   value="${esc(c.name)}" />
         <input type="hidden" data-field="series" value="${esc(c.series || '')}" />
         <input type="hidden" data-field="prompt" value="${esc(c.prompt || '')}" />
+        <input type="hidden" data-field="source_type" value="${esc(c.source_type || '')}" />
+        <input type="hidden" data-field="source_title" value="${esc(c.source_title || '')}" />
+        <input type="hidden" data-field="source_character_name" value="${esc(c.source_character_name || '')}" />
         <button onclick="event.stopPropagation(); deleteChar(${i})"
                 class="text-gray-300 hover:text-red-500 text-xs shrink-0 opacity-0 group-hover:opacity-100 transition-opacity">✕</button>`;
       return div;
@@ -642,12 +996,23 @@
         name:   card.querySelector('[data-field="name"]')?.value   || '',
         series: card.querySelector('[data-field="series"]')?.value || '',
         prompt: card.querySelector('[data-field="prompt"]')?.value || '',
+        source_type: card.querySelector('[data-field="source_type"]')?.value || '',
+        source_title: card.querySelector('[data-field="source_title"]')?.value || '',
+        source_character_name: card.querySelector('[data-field="source_character_name"]')?.value || '',
       }));
     }
 
     function addCharInline() {
       if (!configData) return;
-      const newChar = { id: '', name: '', series: '', prompt: '' };
+      const newChar = {
+        id: '',
+        name: '',
+        series: '',
+        prompt: '',
+        source_type: '',
+        source_title: '',
+        source_character_name: '',
+      };
       configData.characters.push(newChar);
       renderCharacters(configData.characters);
       const cards = document.querySelectorAll('#characters-list .char-card');
@@ -691,7 +1056,9 @@
     }
 
     function renderSequence(sequence) {
+      if (configData) configData.page_sequence = sequence;
       const list = document.getElementById('sequence-list');
+      if (!list) return;
       list.innerHTML = '';
       sequence.forEach((entry, i) => {
         const div = document.createElement('div');
@@ -699,17 +1066,19 @@
         div.dataset.index = i;
 
         // Extract char_id from filename (e.g. "book2_gojo.png" → "gojo")
-        const charId = entry.file.replace(/^[^_]+_/, '').replace(/\.png$/i, '');
+        const charId = resolveCharIdFromFilename(entry.file);
         div.dataset.charId = charId;
 
+        const previewFile = getCanonicalFileForCharId(charId);
+
         // Look up current prompt from configData characters
-        const charData = configData?.characters?.find(c => c.id === charId);
+        const charData = configData?.characters?.find(c => normalizeCharKey(c.id) === normalizeCharKey(charId));
         div.dataset.currentPrompt = charData?.prompt || '';
 
         div.innerHTML = `
           <div class="flex items-center gap-2">
             <span class="text-xs text-gray-400 w-4 shrink-0">${i + 1}</span>
-            <img src="/images/${BOOK_NAME}/${esc(entry.file)}"
+                <img src="/images/${BOOK_NAME}/${esc(previewFile)}?v=${window._imgCacheBust}"
                  class="w-8 h-10 object-cover rounded border border-gray-200 shrink-0 bg-gray-100"
                  onerror="this.style.opacity='0.2'" loading="lazy" />
             <span class="font-mono text-xs text-gray-500 w-28 truncate shrink-0" data-seq-file>${esc(entry.file)}</span>
@@ -754,6 +1123,8 @@
     }
 
     function collectSequence() {
+      const list = document.getElementById('sequence-list');
+      if (!list) return configData?.page_sequence || [];
       const files  = Array.from(document.querySelectorAll('[data-seq-file]')).map(el => el.textContent.trim());
       const labels = Array.from(document.querySelectorAll('[data-seq-label]')).map(el => el.value.trim());
       return files.map((file, i) => ({ file, label: labels[i] }));
@@ -781,7 +1152,7 @@
         testpen:       configData.testpen,
         images_folder: configData.images_folder,
         characters:    collectCharacters(),
-        page_sequence: collectSequence(),
+        page_sequence: configData?.page_sequence || [],
       };
       const res = await fetch(`/api/book/${bookName}/config`, {
         method: 'PUT',
@@ -863,15 +1234,136 @@
     }
 
     function regenerate(bookName, filename) {
-      const charId = filename.replace(/^book\d+_/, '').replace('.png', '');
-      startStream(`/stream/generate/${bookName}?char_id=${charId}`,
-                  `🔄 Regenerating ${filename}`);
+      const charId = resolveCharIdFromFilename(filename);
+      if (!charId) {
+        showToast('❌ Impossible de résoudre le personnage à régénérer');
+        return;
+      }
+      startStream(`/stream/generate/${bookName}?char_id=${charId}&force=true`,
+                  `🔄 Regenerating ${filename}`,
+                  {
+                    reloadOnDone: false,
+                    onDone: (hadError) => {
+                      refreshViewAfterGeneration(charId)
+                        .then(() => {
+                          if (hadError) {
+                            showToast('⚠️ Terminé avec avertissement, affichage rafraîchi');
+                          }
+                        })
+                        .catch(() => refreshCharImagesInView(charId));
+                    }
+                  });
     }
 
-    function startStream(url, title) {
+    // ── Import modal ───────────────────────────────────────────────────────────
+    let importImageCatalog = null;
+    let selectedImportBook = '';
+
+    async function openImportModal() {
+      const modal = document.getElementById('import-image-modal');
+      modal.classList.remove('hidden');
+
+      if (!importImageCatalog) {
+        const res = await fetch('/api/images/all');
+        importImageCatalog = await res.json();
+      }
+
+      const sourceBooks = Object.keys(importImageCatalog || {}).filter(name => name !== BOOK_NAME);
+      selectedImportBook = sourceBooks[0] || '';
+      renderImportBooks();
+      renderImportImages();
+    }
+
+    function closeImportModal() {
+      document.getElementById('import-image-modal').classList.add('hidden');
+    }
+
+    function renderImportBooks() {
+      const list = document.getElementById('import-books-list');
+      const sourceBooks = Object.keys(importImageCatalog || {}).filter(name => name !== BOOK_NAME);
+
+      if (!sourceBooks.length) {
+        list.innerHTML = '<p class="text-xs text-gray-400 italic">Aucun autre dossier image disponible</p>';
+        return;
+      }
+
+      list.innerHTML = sourceBooks.map(book => {
+        const active = book === selectedImportBook;
+        return `<button type="button"
+          onclick="selectedImportBook='${esc(book)}'; renderImportBooks(); renderImportImages()"
+          class="w-full text-left text-xs px-3 py-2 rounded-lg border transition-colors ${active
+            ? 'bg-indigo-50 text-indigo-700 border-indigo-300 font-semibold'
+            : 'bg-white text-gray-700 border-gray-200 hover:border-indigo-300'}"
+        >${esc(book)}</button>`;
+      }).join('');
+    }
+
+    function renderImportImages() {
+      const grid = document.getElementById('import-images-grid');
+      const images = (importImageCatalog && selectedImportBook)
+        ? (importImageCatalog[selectedImportBook] || [])
+        : [];
+
+      if (!selectedImportBook) {
+        grid.innerHTML = '<p class="text-xs text-gray-400 italic col-span-3">Aucune source disponible</p>';
+        return;
+      }
+
+      if (!images.length) {
+        grid.innerHTML = '<p class="text-xs text-gray-400 italic col-span-3">Aucune image dans ce dossier</p>';
+        return;
+      }
+
+      grid.innerHTML = images.map(file => `
+        <button type="button"
+                onclick="importImageFromBook('${esc(file)}')"
+                class="group border border-gray-200 rounded-lg p-2 hover:border-indigo-400 hover:shadow-sm transition-all text-left">
+          <img src="/images/${esc(selectedImportBook)}/${esc(file)}?v=${window._imgCacheBust}"
+               alt="${esc(file)}"
+               class="w-full h-24 object-cover rounded bg-gray-100"
+               loading="lazy" />
+          <p class="mt-1 text-[10px] text-gray-500 truncate group-hover:text-indigo-700">${esc(file)}</p>
+        </button>
+      `).join('');
+    }
+
+    async function importImageFromBook(filename) {
+      if (!selectedImportBook) return;
+
+      const res = await fetch(`/api/book/${BOOK_NAME}/add-image`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ source_book: selectedImportBook, filename }),
+      });
+      if (!res.ok) {
+        showToast('❌ Échec import image');
+        return;
+      }
+
+      const data = await res.json();
+      const chars = collectCharacters();
+      if (!chars.some(c => c.id === data.new_id)) {
+        chars.push({ id: data.new_id, name: data.new_id, series: '', prompt: '' });
+      }
+      renderCharacters(chars);
+
+      const seq = collectSequence();
+      if (!seq.some(e => e.file === data.new_filename)) {
+        seq.push({ file: data.new_filename, label: data.new_id });
+      }
+      renderSequence(seq);
+
+      closeImportModal();
+      showToast(`✅ Image importée: ${data.new_filename}`);
+    }
+
+    function startStream(url, title, options = {}) {
+      const { reloadOnDone = true, onDone = null, onFinally = null } = options;
       const wrapper = document.getElementById('console-wrapper');
       const output  = document.getElementById('stream-output');
       const titleEl = document.getElementById('console-title');
+      let hadError = false;
+      let streamCompleted = false;
       wrapper.classList.remove('hidden');
       output.textContent = '';
       titleEl.textContent = title;
@@ -880,17 +1372,34 @@
       activeSource = new EventSource(url);
       activeSource.onmessage = (e) => {
         if (e.data === '[DONE]') {
+          streamCompleted = true;
           activeSource.close();
-          output.textContent += '\\n✅ Complete\\n';
-          setTimeout(() => location.reload(), 1500);
+          if (hadError) {
+            output.textContent += '\n❌ Terminé avec erreurs\n';
+          } else {
+            output.textContent += '\n✅ Complete\n';
+          }
+          if (typeof onDone === 'function') onDone(hadError);
+          if (reloadOnDone && !hadError) {
+            setTimeout(() => location.reload(), 1500);
+          }
+          if (typeof onFinally === 'function') onFinally();
         } else {
           output.textContent += e.data + '\\n';
+          if (/^ERROR:/i.test(e.data) || /FAILED:/i.test(e.data)) {
+            hadError = true;
+          }
         }
         output.scrollTop = output.scrollHeight;
       };
       activeSource.onerror = () => {
+        // Ignore noisy transport errors after a clean [DONE] completion.
+        if (streamCompleted) return;
+        hadError = true;
         output.textContent += '\\n[Connection error]\\n';
         activeSource.close();
+        if (typeof onDone === 'function') onDone(true);
+        if (typeof onFinally === 'function') onFinally();
       };
     }
 
@@ -908,11 +1417,14 @@
       const examples = tagExamples[category] || {};
       const slug = _slugify(tag);
       const url = examples[slug];
+      if (!url) return;
       const panel = document.getElementById('tag-gallery-panel');
-      const img   = document.getElementById('tg-img');
       const label = document.getElementById('tg-label');
+      const img   = document.getElementById('tg-img');
+      const errEl = document.getElementById('tg-error');
       label.textContent = tag;
-      img.src = url || '';
+      if (img) { img.hidden = false; img.src = url; }
+      if (errEl) errEl.classList.add('hidden');
       panel.classList.remove('hidden');
     }
 
@@ -1005,16 +1517,15 @@
         // Keep the card's data attribute in sync for future feedback sessions
         if (card) card.dataset.currentPrompt = refined;
 
-        // Save config to backend (cfg-title/subtitle/author don't exist in this view,
-        // fall back to configData values which were loaded on init)
+        // Save config to backend
         const payload = {
-          title:         configData?.title || '',
-          subtitle:      configData?.subtitle || '',
-          author:        configData?.author || '',
+          title:         document.getElementById('cfg-title')?.value.trim() || configData?.title || '',
+          subtitle:      document.getElementById('cfg-subtitle')?.value.trim() || configData?.subtitle || '',
+          author:        document.getElementById('cfg-author')?.value.trim() || configData?.author || '',
           testpen:       configData?.testpen,
           images_folder: configData?.images_folder,
           characters:    collectCharacters(),
-          page_sequence: collectSequence(),
+          page_sequence: configData?.page_sequence || [],
         };
         const saveRes = await fetch(`/api/book/${BOOK_NAME}/config`, {
           method: 'PUT',

@@ -10,7 +10,22 @@ import json    # used by write_config
 import pathlib
 import pprint  # used by write_config
 
+from pipeline.prompt import compact_character_description
+
 ROOT = pathlib.Path(__file__).parent.parent
+
+
+def _normalize_character(c: dict) -> dict:
+    """Return a backward-compatible character payload with optional reference fields."""
+    return {
+        "id": c.get("id", ""),
+        "name": c.get("name", ""),
+        "series": c.get("series", ""),
+        "prompt": compact_character_description(c.get("prompt", "")),
+        "source_type": c.get("source_type", ""),
+        "source_title": c.get("source_title", ""),
+        "source_character_name": c.get("source_character_name", ""),
+    }
 
 
 def _tuples_to_lists(data):
@@ -56,7 +71,7 @@ def read_config(book_name: str) -> dict:
         "author":               getattr(module, "AUTHOR",   ""),
         "testpen":              getattr(module, "TESTPEN",  ""),
         "images_folder":        images_folder,
-        "characters":           getattr(module, "CHARACTERS",   []),
+        "characters":           [_normalize_character(c) for c in getattr(module, "CHARACTERS", [])],
         "page_sequence": [
             {"file": f, "label": lbl}
             for f, lbl in getattr(module, "PAGE_SEQUENCE", [])
@@ -160,12 +175,16 @@ def _render_config(
     # Formater CHARACTERS
     char_blocks = []
     for c in characters:
+        c = _normalize_character(c)
         char_blocks.append(
             "    {\n"
             f'        "id":     {json.dumps(c["id"], ensure_ascii=False)},\n'
             f'        "name":   {json.dumps(c["name"], ensure_ascii=False)},\n'
             f'        "series": {json.dumps(c["series"], ensure_ascii=False)},\n'
             f'        "prompt": {json.dumps(c["prompt"], ensure_ascii=False)},\n'
+            f'        "source_type": {json.dumps(c["source_type"], ensure_ascii=False)},\n'
+            f'        "source_title": {json.dumps(c["source_title"], ensure_ascii=False)},\n'
+            f'        "source_character_name": {json.dumps(c["source_character_name"], ensure_ascii=False)},\n'
             "    }"
         )
     chars_str = "[\n" + ",\n".join(char_blocks) + "\n]" if char_blocks else "[]"

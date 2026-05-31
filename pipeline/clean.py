@@ -32,6 +32,7 @@ Output:
 """
 
 import argparse
+from collections import deque
 import pathlib
 import sys
 
@@ -66,6 +67,21 @@ COLOR_STRIP_TOL = 25   # max RGB channel spread below which pixel is considered 
 # Thin strokes (< FILL_REMOVAL_RADIUS*2 px wide) are eroded away → not in fill mask → preserved.
 # Large filled areas survive erosion → detected as fills → whitened.
 FILL_REMOVAL_RADIUS = 8   # passes of MaxFilter(3) ≈ erosion depth in pixels
+
+# Solid-region detection thresholds (component-based, quality-preserving).
+SOLID_DARK_THRESHOLD = 70
+SOLID_MIN_AREA = 120
+SOLID_MIN_OCCUPANCY = 0.38
+SOLID_MAX_ASPECT = 3.5
+
+# Gray cleanup thresholds (remove shading/gradients while preserving edge antialiasing).
+GRAY_MIN = 95
+GRAY_MAX = 235
+EDGE_DARK_THRESHOLD = 90
+EDGE_RADIUS = 0
+
+# Final strict binarization threshold for optional hard BW output.
+BINARY_THRESHOLD = 180
 
 
 # ── Core operations ────────────────────────────────────────────────────────────
@@ -150,46 +166,146 @@ def strip_colors(img: Image.Image, verbose: bool = True) -> Image.Image:
 
 def remove_black_fills(img: Image.Image, radius: int = FILL_REMOVAL_RADIUS, verbose: bool = True) -> Image.Image:
     """
-    Remove large solid black fill areas while preserving thin outline strokes.
+    Remove solid black islands without destroying thin outlines.
 
-    Algorithm (erode → dilate → intersect):
-    1. Erode: MaxFilter × radius shrinks black regions. Thin strokes (< radius*2 px wide)
-       disappear entirely; only pixels deep inside thick fills survive as "seeds".
-    2. Dilate: MinFilter × radius expands seeds back toward the original fill boundary.
-       Using the same radius as erosion keeps the dilation from bleeding into adjacent
-       strokes — it recovers approximately the same region that was eroded.
-    3. Intersect with original binary: only pixels that were black in the original AND
-       are inside the recovered fill region become white. Thin strokes were not seeded
-       so they are never recovered → they stay black (preserved).
+    Uses connected-component analysis on very dark pixels and removes only components
+    that are both sufficiently large and sufficiently dense inside their bounding box.
+    This preserves expressive line quality better than global binarization.
     """
-    gray   = img.convert("L")
-    binary = gray.point(lambda p: 0 if p < 128 else 255)
+    _ = radius  # kept for backward compatibility with existing call sites
 
-    # Step 1: erode — find pixels deep inside thick fills (seeds)
-    eroded = binary
-    for _ in range(radius):
-        eroded = eroded.filter(ImageFilter.MaxFilter(3))
+    gray = img.convert("L")
+    w, h = gray.size
+    lum = list(gray.getdata())
+    dark = [v < SOLID_DARK_THRESHOLD for v in lum]
+    visited = bytearray(w * h)
+    rgb_data = list(img.convert("RGB").getdata())
 
-    # Step 2: dilate seeds back — same radius to avoid bleeding into nearby strokes
-    dilated = eroded
-    for _ in range(radius):
-        dilated = dilated.filter(ImageFilter.MinFilter(3))
+    removed_pixels = 0
+    removed_components = 0
 
-    # Step 3: intersect — only whiten pixels that are BOTH in original fill AND recovered region
-    fill_mask   = list(dilated.getdata())
-    binary_data = list(binary.getdata())
-    rgb_data    = list(img.convert("RGB").getdata())
-    result      = [
-        (255, 255, 255) if (m < 128 and o < 128) else px
-        for m, o, px in zip(fill_mask, binary_data, rgb_data)
-    ]
-    fill_count = sum(1 for m, o in zip(fill_mask, binary_data) if m < 128 and o < 128)
+    def _neighbors(idx: int):
+        x = idx % w
+        y = idx // w
+        if x > 0:
+            yield idx - 1
+        if x < w - 1:
+            yield idx + 1
+        if y > 0:
+            yield idx - w
+        if y < h - 1:
+            yield idx + w
+        if x > 0 and y > 0:
+            yield idx - w - 1
+        if x < w - 1 and y > 0:
+            yield idx - w + 1
+        if x > 0 and y < h - 1:
+            yield idx + w - 1
+        if x < w - 1 and y < h - 1:
+            yield idx + w + 1
+
+    for start in range(w * h):
+        if visited[start] or not dark[start]:
+            continue
+
+        q = deque([start])
+        visited[start] = 1
+        comp = []
+        min_x = max_x = start % w
+        min_y = max_y = start // w
+
+        while q:
+            idx = q.popleft()
+            comp.append(idx)
+            x = idx % w
+            y = idx // w
+            if x < min_x:
+                min_x = x
+            if x > max_x:
+                max_x = x
+            if y < min_y:
+                min_y = y
+            if y > max_y:
+                max_y = y
+
+            for nb in _neighbors(idx):
+                if not visited[nb] and dark[nb]:
+                    visited[nb] = 1
+                    q.append(nb)
+
+        area = len(comp)
+        bbox_area = (max_x - min_x + 1) * (max_y - min_y + 1)
+        occupancy = (area / bbox_area) if bbox_area else 0.0
+        width = max_x - min_x + 1
+        height = max_y - min_y + 1
+        aspect = (max(width, height) / max(1, min(width, height)))
+
+        if area >= SOLID_MIN_AREA and occupancy >= SOLID_MIN_OCCUPANCY and aspect <= SOLID_MAX_ASPECT:
+            for idx in comp:
+                rgb_data[idx] = (255, 255, 255)
+            removed_pixels += area
+            removed_components += 1
+
+    out = Image.new("RGB", img.size)
+    out.putdata(rgb_data)
+    if verbose:
+        total = w * h
+        print(
+            f"  [fill-removal] removed {removed_components} dense dark component(s), "
+            f"{removed_pixels} px ({100 * removed_pixels / total:.1f}%)"
+        )
+    return out
+
+
+def remove_gray_fills_preserve_edges(img: Image.Image, verbose: bool = True) -> Image.Image:
+    """
+    Remove shading/gradients while preserving line quality around edges.
+
+    Mid-tone gray pixels are whitened to suppress residual gradients/shading while
+    preserving true dark outlines.
+    """
+    gray = img.convert("L")
+    gray_data = list(gray.getdata())
+    edge_seed = gray.point(lambda p: 0 if p < EDGE_DARK_THRESHOLD else 255)
+
+    near_edges = edge_seed
+    for _ in range(EDGE_RADIUS):
+        near_edges = near_edges.filter(ImageFilter.MinFilter(3))
+    near_edges_data = list(near_edges.getdata())
+
+    rgb_data = list(img.convert("RGB").getdata())
+    cleaned = 0
+    result = []
+    for lum, near, px in zip(gray_data, near_edges_data, rgb_data):
+        if near > 250 and GRAY_MIN <= lum <= GRAY_MAX:
+            result.append((255, 255, 255))
+            cleaned += 1
+        else:
+            result.append(px)
+
     out = Image.new("RGB", img.size)
     out.putdata(result)
     if verbose:
-        total = len(fill_mask)
-        print(f"  [fill-removal] {fill_count} fill pixels removed ({100 * fill_count / total:.1f}%)")
+        total = len(result)
+        print(f"  [gray-clean] whitened {cleaned} gray pixels ({100 * cleaned / total:.1f}%)")
     return out
+
+
+def enforce_binary_lineart(img: Image.Image, threshold: int = BINARY_THRESHOLD, verbose: bool = True) -> Image.Image:
+    """
+    Force strict black/white output to eliminate gradients and gray shading.
+
+    After fill cleanup, any remaining grayscale anti-shading is converted to pure
+    binary line art: dark pixels -> black, all others -> white.
+    """
+    gray = img.convert("L")
+    # Mode "1" applies a hard threshold and stores 0/255 only.
+    bw = gray.point(lambda p: 0 if p < threshold else 255, mode="1").convert("RGB")
+    if verbose:
+        black = sum(1 for p in bw.convert("L").getdata() if p == 0)
+        total = bw.width * bw.height
+        print(f"  [binary] strict BW applied, black pixels={black} ({100 * black / total:.1f}%)")
+    return bw
 
 
 def auto_clean_corners(img: Image.Image, verbose: bool = True) -> tuple[Image.Image, int]:
@@ -229,9 +345,28 @@ def crop_to_portrait(img: Image.Image) -> Image.Image:
     target_w = int(h * (8.5 / 11.0))
     target_w = min(target_w, w)   # can't exceed actual width
 
-    x1 = (w - target_w) // 2
+    # Content-aware horizontal center: bias crop toward dark-line mass so we
+    # keep the character in frame instead of always taking exact center strip.
+    gray = img.convert("L")
+    px = gray.load()
+    step_y = max(1, h // 300)
+    weights = [0] * w
+    for y in range(0, h, step_y):
+        for x in range(w):
+            lum = px[x, y]
+            # Weight dark strokes more heavily; ignore near-white background.
+            if lum < 245:
+                weights[x] += (255 - lum)
+
+    total = sum(weights)
+    if total > 0:
+        center_x = int(sum(i * wgt for i, wgt in enumerate(weights)) / total)
+    else:
+        center_x = w // 2
+
+    x1 = max(0, min(w - target_w, center_x - (target_w // 2)))
     x2 = x1 + target_w
-    print(f"  [crop] Landscape {w}x{h} -> portrait {target_w}x{h}  (x: {x1}..{x2})")
+    print(f"  [crop] Landscape {w}x{h} -> portrait {target_w}x{h}  (x: {x1}..{x2}, center_x={center_x})")
     return img.crop((x1, 0, x2, h))
 
 
@@ -284,7 +419,12 @@ Examples:
     parser.add_argument(
         "--lineart",
         action="store_true",
-        help="Strip color/gray fills: convert to pure black-and-white via luminance threshold.",
+        help="Apply quality-preserving cleanup: strip colors, remove solid black fills, and clean gray shading.",
+    )
+    parser.add_argument(
+        "--strict-bw",
+        action="store_true",
+        help="Optional hard binarization (0/255 only). More aggressive, can reduce detail quality.",
     )
     parser.add_argument(
         "--auto",
@@ -345,6 +485,9 @@ def main() -> None:
     if args.lineart:
         img = strip_colors(img)
         img = remove_black_fills(img)
+        img = remove_gray_fills_preserve_edges(img)
+        if args.strict_bw:
+            img = enforce_binary_lineart(img)
 
     if args.zones:
         for zone_str in args.zones:

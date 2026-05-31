@@ -4,6 +4,8 @@ pipeline/prompt.py — Shared prompt assembly for Gemini image generation.
 Used by both pipeline/generate.py (CLI) and dashboard/app.py (web).
 """
 
+import re
+
 STYLE_TAGS = [
     "thick outlines",
     "thin detailed lines",
@@ -67,6 +69,83 @@ _BASE_TEMPLATE = (
 )
 
 
+def compact_character_description(description: str) -> str:
+    """
+    Normalize legacy dashboard prompt payloads into compact character descriptions.
+
+    Older UI versions sometimes saved a fully templated prompt into CHARACTERS.prompt,
+    then generation wrapped it again via _BASE_TEMPLATE, which weakens fidelity.
+    This sanitizer strips known wrappers so build_prompt always receives only the
+    compact character description payload.
+    """
+    s = (description or "").strip()
+    if not s:
+        return ""
+
+    # Remove repeated legacy wrapper prefixes.
+    wrapper_prefixes = [
+        "Provide Professional adult coloring book page of ",
+        "Create a professional adult coloring book page. ",
+        "Character: ",
+    ]
+    changed = True
+    while changed:
+        changed = False
+        for pref in wrapper_prefixes:
+            if s.startswith(pref):
+                s = s[len(pref):].strip()
+                changed = True
+
+    # If a full technical tail is embedded, keep only the semantic lead.
+    cut_markers = [
+        "full body centered, pure white background.",
+        "CRITICAL: zero black fills",
+        "Thick, bold black vector-style outlines only.",
+        "High contrast, clean line art, 300 DPI quality",
+    ]
+    lower_s = s.lower()
+    cut_idx = None
+    for marker in cut_markers:
+        idx = lower_s.find(marker.lower())
+        if idx != -1:
+            cut_idx = idx if cut_idx is None else min(cut_idx, idx)
+    if cut_idx is not None and cut_idx > 0:
+        s = s[:cut_idx].strip().rstrip(",")
+
+    # Collapse accidental duplicated wrapper fragments in the middle.
+    s = re.sub(r"\bProvide Professional adult coloring book page of\b", "", s, flags=re.IGNORECASE)
+    s = re.sub(r"\s{2,}", " ", s).strip(" ,")
+
+    # Remove repeated comma-separated segments while preserving order.
+    seen = set()
+    seen_identity = False
+    seen_reference = False
+    deduped = []
+    for part in [p.strip() for p in s.split(",") if p.strip()]:
+        lower_part = part.lower()
+        if lower_part.startswith("character identity:"):
+            if seen_identity:
+                continue
+            seen_identity = True
+        if lower_part.startswith("reference source:"):
+            if seen_reference:
+                continue
+            seen_reference = True
+        key = part.lower()
+        if key in seen:
+            continue
+        seen.add(key)
+        deduped.append(part)
+    s = ", ".join(deduped)
+
+    return s
+
+
+# Backward-compatible alias for existing internal callers/tests.
+def _sanitize_character_description(description: str) -> str:
+    return compact_character_description(description)
+
+
 def build_prompt(
     description: str,
     style_tags: list[str] | None = None,
@@ -75,7 +154,7 @@ def build_prompt(
     theme_tags: list[str] | None = None,
     extra_notes: str = "",
 ) -> str:
-    parts = [description]
+    parts = [compact_character_description(description)]
     if extra_notes and extra_notes.strip():
         parts.append(extra_notes.strip())
     for tag_list in (style_tags, pose_tags, element_tags, theme_tags):

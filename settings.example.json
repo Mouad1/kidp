@@ -6,5 +6,16 @@
     "concurrency_limit": 2,
     "default_width": 8.5,
     "default_height": 11.0,
-    "global_prompt_suffix": "coloring book page, lineart, white background, clean lines, no shading, no colors"
+    "global_prompt_suffix": "coloring book page, lineart, white background, clean lines, no shading, no colors",
+    "pricing": {
+        "currency": "USD",
+        "bw_per_page": 0.012,
+        "color_per_page": 0.07,
+        "paper_quality": {
+            "standard": 1.0,
+            "premium": 1.5
+        },
+        "cover_cost": 1.0,
+        "markup_multiplier": 2.5
+    }
 }

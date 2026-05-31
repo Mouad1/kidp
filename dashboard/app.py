@@ -10,6 +10,7 @@ Usage:
 """
 
 import asyncio
+import io
 import importlib.util
 import os
 import pathlib
@@ -25,15 +26,59 @@ sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent.parent))
 from fastapi import FastAPI, HTTPException, Request, Form, UploadFile, File
 from fastapi.responses import FileResponse, HTMLResponse, StreamingResponse
 from fastapi.templating import Jinja2Templates
+from PIL import Image, UnidentifiedImageError
 from pydantic import BaseModel
 from pipeline.config_io import read_config, write_config
 from pipeline.prompt import STYLE_TAGS, POSE_TAGS, ELEMENT_TAGS, THEME_TAGS, GROUP_DYNAMICS
 
+from storyforge.templates import list_templates as _sf_list_templates, load_template as _sf_load_template
+from storyforge.identity import build_hero as _sf_build_hero, save_sheet as _sf_save_sheet, load_sheet as _sf_load_sheet
+from storyforge.engine import resolve as _sf_resolve
+from storyforge.generator import generate_page as _sf_generate_page
+from storyforge.builder import build_book as _sf_build_book
+from storyforge.i18n import translate_pages as _sf_translate_pages
+from storyforge.expand import expand_narrative as _sf_expand_narrative
+from storyforge.cover import generate_cover as _sf_generate_cover
+
 ROOT = pathlib.Path(__file__).parent.parent
 sys.path.insert(0, str(ROOT))
 
+
+def _resolve_gemini_api_key() -> str:
+    """Resolve Gemini key from runtime env first, then dashboard settings files."""
+    key = os.environ.get("GEMINI_API_KEY", "").strip()
+    if key:
+        return key
+
+    settings_file = ROOT / "settings.json"
+    if settings_file.exists():
+        try:
+            data = json.loads(settings_file.read_text())
+            key = str(data.get("gemini_api_key", "")).strip()
+            if key:
+                return key
+        except Exception:
+            pass
+
+    env_local = ROOT / ".env.local"
+    if env_local.exists():
+        try:
+            content = env_local.read_text()
+            m = re.search(r'^\s*GEMINI_API_KEY\s*=\s*"?([^"\n]+)"?\s*$', content, re.MULTILINE)
+            if m:
+                return m.group(1).strip()
+        except Exception:
+            pass
+
+    return ""
+
 app = FastAPI(title="KDP Dashboard")
 templates = Jinja2Templates(directory=str(pathlib.Path(__file__).parent / "templates"))
+
+from fastapi.staticfiles import StaticFiles as _StaticFiles
+_ASSETS_DIR = ROOT / "assets"
+_ASSETS_DIR.mkdir(exist_ok=True)
+app.mount("/assets", _StaticFiles(directory=str(_ASSETS_DIR)), name="assets")
 
 
 # ── Pydantic models ─────────────────────────────────────────────────────────────
@@ -53,6 +98,9 @@ class CharacterModel(BaseModel):
     name: str
     series: str
     prompt: str
+    source_type: str = ""
+    source_title: str = ""
+    source_character_name: str = ""
 
 
 class PageEntryModel(BaseModel):
@@ -258,9 +306,9 @@ async def api_book(book_name: str):
 
 
 @app.get("/stream/generate/{book_name}")
-async def stream_generate(book_name: str, char_id: str = "", force: bool = False):
+async def stream_generate(request: Request, book_name: str, char_id: str = "", force: bool = False):
     """Stream real-time output of pipeline/generate.py"""
-    api_key = os.environ.get("GEMINI_API_KEY", "")
+    api_key = _resolve_gemini_api_key()
     cmd = [sys.executable, str(ROOT / "pipeline" / "generate.py"), "--book", book_name, "--auto-clean"]
     if char_id:
         cmd += ["--id", char_id]
@@ -272,10 +320,11 @@ async def stream_generate(book_name: str, char_id: str = "", force: bool = False
         env["GEMINI_API_KEY"] = api_key
 
     async def event_stream():
+        process = None
         try:
             if not api_key:
                 yield "data: ERROR: GEMINI_API_KEY not set in server environment.\n\n"
-                yield "data: Set it with:  export GEMINI_API_KEY=your-key  then restart the dashboard.\n\n"
+                yield "data: Set it in Settings page or export GEMINI_API_KEY, then restart dashboard if needed.\n\n"
                 return
             process = await asyncio.create_subprocess_exec(
                 *cmd, env=env,
@@ -283,18 +332,31 @@ async def stream_generate(book_name: str, char_id: str = "", force: bool = False
                 stderr=asyncio.subprocess.STDOUT,
             )
             while True:
+                if await request.is_disconnected():
+                    if process.returncode is None:
+                        process.terminate()
+                    break
                 try:
                     line = await asyncio.wait_for(process.stdout.readline(), timeout=10.0)
                     if not line:
                         break
-                    yield f"data: {line.decode().rstrip()}\n\n"
+                    yield f"data: {line.decode(errors='replace').rstrip()}\n\n"
                 except asyncio.TimeoutError:
                     yield ": keepalive\n\n"  # SSE comment — keeps connection alive, ignored by browser
-            await process.wait()
+            if process.returncode is None:
+                await process.wait()
+        except asyncio.CancelledError:
+            if process and process.returncode is None:
+                process.terminate()
+            raise
         except Exception as e:
             yield f"data: ERROR: {e}\n\n"
         finally:
-            yield "data: [DONE]\n\n"
+            try:
+                yield "data: [DONE]\n\n"
+            except Exception:
+                # Client connection may already be closed; suppress trailing write errors.
+                pass
 
     return StreamingResponse(event_stream(), media_type="text/event-stream",
                              headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"})
@@ -396,8 +458,6 @@ async def stream_cleanup(book_name: str, char_id: str = "", mode: str = "auto"):
                              headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"})
 
 
-@app.get("/stream/assemble/{book_name}")
-
 @app.get("/stream/cover/{book_name}")
 async def stream_cover(book_name: str, custom_prompt: str | None = None):
     """Stream real-time output of pipeline/cover.py"""
@@ -493,6 +553,12 @@ async def api_rewrite_page(data: RewritePageModel):
 class GlobalReplaceModel(BaseModel):
     search: str
     replace: str
+
+
+class FeedbackModel(BaseModel):
+    feedback: str
+    current_prompt: str
+    page_ref: str  # character id (coloring) or str(page_number) (story)
 
 @app.post("/api/books/{book_name}/global-replace")
 async def api_global_replace(book_name: str, data: GlobalReplaceModel):
@@ -637,13 +703,51 @@ async def api_new_book(data: NewBookModel):
 
 @app.get("/api/prompt/tags")
 async def api_prompt_tags():
+    def _examples(category: str, tags: list[str]) -> dict[str, str]:
+        slug = lambda t: t.lower().replace(" ", "_").replace("-", "_").replace("/", "_")
+        return {slug(t): f"/assets/tag_examples/{category}/{slug(t)}.png" for t in tags}
+
     return {
-        "style": STYLE_TAGS,
-        "pose": POSE_TAGS,
-        "elements": ELEMENT_TAGS,
-        "theme": THEME_TAGS,
-        "group_dynamics": GROUP_DYNAMICS,
+        "style":             STYLE_TAGS,
+        "style_examples":    _examples("style",    STYLE_TAGS),
+        "pose":              POSE_TAGS,
+        "pose_examples":     _examples("pose",     POSE_TAGS),
+        "elements":          ELEMENT_TAGS,
+        "elements_examples": _examples("elements", ELEMENT_TAGS),
+        "theme":             THEME_TAGS,
+        "theme_examples":    _examples("theme",    THEME_TAGS),
+        "group_dynamics":    GROUP_DYNAMICS,
     }
+
+
+@app.post("/api/feedback/{book_name}")
+async def api_feedback(book_name: str, data: FeedbackModel):
+    if not os.environ.get("GEMINI_API_KEY"):
+        raise HTTPException(status_code=500, detail="GEMINI_API_KEY non configuré.")
+
+    process = await asyncio.create_subprocess_exec(
+        sys.executable, str(ROOT / "pipeline" / "refine_prompt.py"),
+        "--prompt",   data.current_prompt,
+        "--feedback", data.feedback,
+        stdout=asyncio.subprocess.PIPE,
+        stderr=asyncio.subprocess.STDOUT,
+        env=os.environ.copy(),
+    )
+    stdout, _ = await process.communicate()
+
+    if process.returncode != 0:
+        raise HTTPException(status_code=500,
+                            detail=f"Script failed: {stdout.decode()}")
+
+    out_text = stdout.decode().strip()
+    try:
+        parsed = json.loads(out_text)
+        if "error" in parsed:
+            raise HTTPException(status_code=500, detail=parsed["error"])
+        return parsed
+    except json.JSONDecodeError:
+        raise HTTPException(status_code=500,
+                            detail=f"Bad JSON from Gemini: {out_text[:300]}")
 
 
 @app.get("/images/{book_name}/{filename}")
@@ -659,7 +763,15 @@ async def serve_image(book_name: str, filename: str):
         raise HTTPException(status_code=403, detail="Access denied")
     if not image_path.exists():
         raise HTTPException(status_code=404, detail="Image not found")
-    return FileResponse(str(image_path), media_type="image/png")
+    return FileResponse(
+        str(image_path),
+        media_type="image/png",
+        headers={
+            "Cache-Control": "no-store, no-cache, must-revalidate, max-age=0",
+            "Pragma": "no-cache",
+            "Expires": "0",
+        },
+    )
 
 
 @app.get("/api/choose-folder")
@@ -894,11 +1006,228 @@ async def api_generate_meta(req: GenerateMetaRequest):
         traceback.print_exc()
         raise HTTPException(status_code=500, detail=str(e))
 
+# ========================================================
+# STORYFORGE — Personalized hero storybooks
+# ========================================================
+
+def _backend_provider():
+    """Return a real Gemini image backend. Overridden in tests with a fake."""
+    from storyforge.gemini_backend import GeminiBackend
+    return GeminiBackend(api_key=_resolve_gemini_api_key())
+
+
+def _analyze_provider(photos):
+    """Analyze photos into a hero descriptor. Overridden in tests with a fake."""
+    from storyforge.gemini_backend import analyze_photos
+    return analyze_photos(photos, api_key=_resolve_gemini_api_key())
+
+
+def _translate_provider(text, target_langs):
+    """Translate text into target languages. Overridden in tests with a fake."""
+    spec = importlib.util.spec_from_file_location(
+        "sf_translate", str(ROOT / "dashboard" / "translate.py"))
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return mod.translate_text(text, target_langs)
+
+
+def _expand_provider(prompt, page_count):
+    """Expand a base narrative into page_count pages. Overridden in tests with a fake."""
+    from storyforge.gemini_backend import expand_story
+    return expand_story(prompt, page_count, api_key=_resolve_gemini_api_key())
+
+
+def _load_pricing_settings() -> dict:
+    """Load pricing config from settings.json, falling back to library defaults."""
+    from pipeline.pricing import default_pricing_settings
+    settings_file = ROOT / "settings.json"
+    if settings_file.exists():
+        try:
+            data = json.loads(settings_file.read_text())
+            pricing = data.get("pricing")
+            if isinstance(pricing, dict) and pricing:
+                return pricing
+        except (json.JSONDecodeError, OSError):
+            pass
+    return default_pricing_settings()
+
+
+
+def _normalize_photo_to_png(data: bytes) -> bytes:
+    """Decode an uploaded image and re-encode as PNG bytes for consistent Gemini refs."""
+    try:
+        with Image.open(io.BytesIO(data)) as im:
+            if im.mode not in ("RGB", "RGBA"):
+                im = im.convert("RGB")
+            out = io.BytesIO()
+            im.save(out, format="PNG")
+            return out.getvalue()
+    except (UnidentifiedImageError, OSError) as exc:
+        raise HTTPException(status_code=400, detail="Unsupported or corrupted image file.") from exc
+
+
+@app.get("/storybook", response_class=HTMLResponse)
+def storybook_page(request: Request):
+    return templates.TemplateResponse(request=request, name="storybook.html", context={})
+
+
+@app.get("/api/storyforge/templates")
+def storyforge_templates():
+    out = []
+    for t in _sf_list_templates():
+        out.append({
+            "slug": t.slug,
+            "name": t.name,
+            "mode": t.mode,
+            "art_style": t.art_style,
+            "variables": [
+                {"key": v.key, "label": v.label, "type": v.type, "options": v.options}
+                for v in t.variables
+            ],
+            "pages": len(t.pages),
+        })
+    return out
+
+
+@app.post("/api/storyforge/{name}/photos")
+async def storyforge_photos(name: str, photos: list[UploadFile] = File(...)):
+    if not re.match(r'^[a-z0-9][a-z0-9-]*[a-z0-9]$', name):
+        raise HTTPException(status_code=400, detail="Invalid book name")
+    if not photos:
+        raise HTTPException(status_code=400, detail="No photos uploaded.")
+    if len(photos) > 3:
+        raise HTTPException(status_code=400, detail="At most 3 photos.")
+    hero_dir = ROOT / "books" / name / "hero"
+    hero_dir.mkdir(parents=True, exist_ok=True)
+    for old in hero_dir.glob("source_*.png"):
+        old.unlink()
+    for i, photo in enumerate(photos):
+        data = await photo.read()
+        if not data:
+            raise HTTPException(status_code=400, detail="Empty photo.")
+        if len(data) > 12 * 1024 * 1024:
+            raise HTTPException(status_code=400, detail="Photo too large (max 12 MB).")
+        png_data = _normalize_photo_to_png(data)
+        (hero_dir / f"source_{i}.png").write_bytes(png_data)
+    return {"saved": len(photos)}
+
+
+@app.get("/api/storyforge/{name}/portrait")
+def storyforge_portrait(name: str):
+    if not re.match(r'^[a-z0-9][a-z0-9-]*[a-z0-9]$', name):
+        raise HTTPException(status_code=400, detail="Invalid book name")
+    path = ROOT / "books" / name / "hero" / "canonical_portrait.png"
+    if not path.exists():
+        raise HTTPException(status_code=404, detail="No portrait yet.")
+    return FileResponse(
+        str(path),
+        media_type="image/png",
+        headers={"Cache-Control": "no-store, no-cache, must-revalidate, max-age=0"},
+    )
+
+
+@app.get("/stream/storyforge/{name}/hero")
+def storyforge_hero(name: str, slug: str):
+    if not re.match(r'^[a-z0-9][a-z0-9-]*[a-z0-9]$', name):
+        raise HTTPException(status_code=400, detail="Invalid book name")
+
+    def stream():
+        try:
+            tpl = _sf_load_template(slug)
+            hero_dir = ROOT / "books" / name / "hero"
+            photos = [p.read_bytes() for p in sorted(hero_dir.glob("source_*.png"))]
+            yield "data: Building hero from photos...\n\n"
+            sheet = _sf_build_hero(photos, tpl.art_style, _backend_provider(), _analyze_provider)
+            _sf_save_sheet(ROOT / "books" / name, sheet)
+            yield "data: Hero ready.\n\n"
+            yield "data: [DONE]\n\n"
+        except Exception as exc:
+            yield f"data: ERROR: {exc}\n\n"
+
+    return StreamingResponse(
+        stream(), media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+    )
+
+
+@app.get("/api/pricing")
+def api_pricing(page_count: int, color: bool = True, paper_quality: str = "standard",
+                has_cover: bool = True):
+    from pipeline.pricing import compute_price
+    settings = _load_pricing_settings()
+    try:
+        return compute_price(page_count, color, paper_quality, has_cover, settings)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+
+
+@app.get("/stream/storyforge/{name}/generate")
+def storyforge_generate(name: str, request: Request, slug: str, title: str,
+                        author: str = "", languages: str = "fr", page_count: int = 0):
+    if not re.match(r'^[a-z0-9][a-z0-9-]*[a-z0-9]$', name):
+        raise HTTPException(status_code=400, detail="Invalid book name")
+    lang_list = [l.strip() for l in languages.split(",") if l.strip()] or ["fr"]
+    reserved = ("slug", "title", "author", "languages", "page_count")
+    variables = {
+        k: v for k, v in request.query_params.items() if k not in reserved
+    }
+
+    def stream():
+        try:
+            tpl = _sf_load_template(slug)
+            hero = _sf_load_sheet(ROOT / "books" / name)
+            if page_count and page_count != len(tpl.pages):
+                yield f"data: Shaping a {page_count}-page story...\n\n"
+                specs = _sf_expand_narrative(tpl, variables, hero, page_count, _expand_provider)
+            else:
+                specs = _sf_resolve(tpl, variables, hero)
+            gen = _backend_provider()
+            page_pngs = []
+            for spec in specs:
+                yield f"data: Generating page {spec.page_number}/{len(specs)}...\n\n"
+                page_pngs.append(_sf_generate_page(spec, hero, gen))
+
+            source_lang = tpl.language_default
+            yield "data: Translating pages...\n\n"
+            page_texts = _sf_translate_pages(specs, source_lang, lang_list, _translate_provider)
+
+            _sf_build_book(name, title, author, tpl.mode, specs, page_pngs, hero,
+                           languages=lang_list, page_texts=page_texts)
+
+            yield "data: Generating cover...\n\n"
+            cover_png = _sf_generate_cover(title, hero, gen)
+            (ROOT / "books" / name / "hero" / "cover.png").write_bytes(cover_png)
+
+            yield "data: Book ready.\n\n"
+            yield "data: [DONE]\n\n"
+        except Exception as exc:
+            yield f"data: ERROR: {exc}\n\n"
+
+    return StreamingResponse(
+        stream(), media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+    )
+
+
+@app.get("/api/storyforge/{name}/cover")
+def storyforge_cover(name: str):
+    if not re.match(r'^[a-z0-9][a-z0-9-]*[a-z0-9]$', name):
+        raise HTTPException(status_code=400, detail="Invalid book name")
+    path = ROOT / "books" / name / "hero" / "cover.png"
+    if not path.exists():
+        raise HTTPException(status_code=404, detail="No cover yet.")
+    return FileResponse(
+        str(path),
+        media_type="image/png",
+        headers={"Cache-Control": "no-store, no-cache, must-revalidate, max-age=0"},
+    )
+
+
+
 if __name__ == "__main__":
     import uvicorn
     print("\nKDP Dashboard running at http://localhost:8000\n")
     uvicorn.run("dashboard.app:app", host="0.0.0.0", port=8000, reload=True, app_dir=str(ROOT))
-
 
 
 

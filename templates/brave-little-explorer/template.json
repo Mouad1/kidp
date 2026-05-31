@@ -1,0 +1,27 @@
+{
+  "name": "The Brave Little Explorer",
+  "mode": "color",
+  "language_default": "fr",
+  "art_style": "soft watercolor children's book illustration, warm palette, gentle lighting",
+  "variables": [
+    { "key": "HERO_NAME", "label": "Child's name", "type": "text" },
+    { "key": "SETTING", "label": "World", "type": "select",
+      "options": ["enchanted forest", "space station", "underwater city"] },
+    { "key": "VALUE", "label": "Lesson learned", "type": "text" },
+    { "key": "SIDEKICK", "label": "Companion animal", "type": "text" }
+  ],
+  "pages": [
+    { "beat": "intro",
+      "text": "{HERO_NAME} woke up at the edge of the {SETTING}, ready for a big adventure.",
+      "image_prompt": "{HERO} standing at the edge of a {SETTING}, soft morning light, curious expression" },
+    { "beat": "friend",
+      "text": "Along the way, {HERO_NAME} met a friendly {SIDEKICK} who became a loyal friend.",
+      "image_prompt": "{HERO} meeting a friendly {SIDEKICK} in the {SETTING}, warm and joyful" },
+    { "beat": "challenge",
+      "text": "Together they faced a tricky problem, and {HERO_NAME} felt a little scared.",
+      "image_prompt": "{HERO} and a {SIDEKICK} facing a challenge in the {SETTING}, dramatic but gentle" },
+    { "beat": "resolution",
+      "text": "By being brave, {HERO_NAME} learned the power of {VALUE}.",
+      "image_prompt": "{HERO} smiling proudly in the {SETTING} with a {SIDEKICK}, triumphant glow" }
+  ]
+}

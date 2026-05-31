@@ -1,0 +1,429 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Personalized Storybook · StoryForge</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    .step-dot { transition: all .2s ease; }
+    .dropzone.drag { border-color: #9333ea; background: #faf5ff; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .spin { animation: spin .8s linear infinite; }
+  </style>
+</head>
+
+<body class="bg-gray-50 text-gray-900 min-h-screen">
+
+  <header class="bg-white border-b border-gray-200 px-6 py-4 flex items-center justify-between">
+    <div class="flex items-center gap-3">
+      <span class="text-2xl">✨</span>
+      <div>
+        <h1 class="text-lg font-bold">StoryForge</h1>
+        <p class="text-xs text-gray-500">Turn a real photo into a personalized hero storybook</p>
+      </div>
+    </div>
+    <a href="/" class="text-sm text-gray-600 hover:text-gray-900">← Back to dashboard</a>
+  </header>
+
+  <!-- Stepper -->
+  <div class="max-w-3xl mx-auto px-6 pt-8">
+    <ol class="flex items-center w-full text-sm font-medium text-gray-500 mb-8">
+      <li class="flex items-center gap-2">
+        <span id="dot-1" class="step-dot w-7 h-7 rounded-full bg-purple-600 text-white flex items-center justify-center text-xs">1</span>
+        <span>Story</span>
+      </li>
+      <li class="flex-1 mx-3 h-px bg-gray-200"></li>
+      <li class="flex items-center gap-2">
+        <span id="dot-2" class="step-dot w-7 h-7 rounded-full bg-gray-200 text-gray-500 flex items-center justify-center text-xs">2</span>
+        <span>Hero photo</span>
+      </li>
+      <li class="flex-1 mx-3 h-px bg-gray-200"></li>
+      <li class="flex items-center gap-2">
+        <span id="dot-3" class="step-dot w-7 h-7 rounded-full bg-gray-200 text-gray-500 flex items-center justify-center text-xs">3</span>
+        <span>Generate</span>
+      </li>
+    </ol>
+  </div>
+
+  <main class="max-w-3xl mx-auto px-6 pb-16">
+
+    <!-- STEP 1 -->
+    <section id="step-1" class="bg-white border border-gray-200 rounded-xl shadow-sm p-6">
+      <h2 class="text-base font-bold mb-4">1 · Choose a story template</h2>
+
+      <label class="block text-sm font-medium text-gray-700 mb-1">Template</label>
+      <select id="template" class="w-full border border-gray-300 rounded-lg px-3 py-2 mb-4 text-sm"></select>
+      <p id="template-desc" class="text-xs text-gray-500 mb-4"></p>
+
+      <div class="grid grid-cols-2 gap-4 mb-4">
+        <div>
+          <label class="block text-sm font-medium text-gray-700 mb-1">Book title</label>
+          <input id="title" type="text" placeholder="Sami's Adventure"
+            class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm" />
+        </div>
+        <div>
+          <label class="block text-sm font-medium text-gray-700 mb-1">Author <span class="text-gray-400">(optional)</span></label>
+          <input id="author" type="text" placeholder="Your name"
+            class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm" />
+        </div>
+      </div>
+
+      <div class="mb-4">
+        <label class="block text-sm font-medium text-gray-700 mb-1">Book ID <span class="text-gray-400">(folder name, lowercase)</span></label>
+        <input id="book-id" type="text" placeholder="samis-adventure"
+          class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm font-mono" />
+        <p class="text-xs text-gray-400 mt-1">Lowercase letters, numbers and dashes only.</p>
+      </div>
+
+      <div id="variables" class="space-y-3"></div>
+
+      <div class="mt-6 border-t border-gray-100 pt-5 space-y-4">
+        <div>
+          <label class="block text-sm font-medium text-gray-700 mb-2">Languages</label>
+          <div id="languages" class="flex flex-wrap gap-3 text-sm">
+            <label class="flex items-center gap-1.5"><input type="checkbox" class="lang" value="fr" checked /> Français</label>
+            <label class="flex items-center gap-1.5"><input type="checkbox" class="lang" value="en" /> English</label>
+            <label class="flex items-center gap-1.5"><input type="checkbox" class="lang" value="es" /> Español</label>
+            <label class="flex items-center gap-1.5"><input type="checkbox" class="lang" value="ar" /> العربية</label>
+          </div>
+          <p class="text-xs text-gray-400 mt-1">Page text is generated for each selected language.</p>
+        </div>
+
+        <div class="grid grid-cols-2 gap-4">
+          <div>
+            <label class="block text-sm font-medium text-gray-700 mb-1">Number of pages</label>
+            <select id="page-count" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm">
+              <option value="8">8 pages</option>
+              <option value="12">12 pages</option>
+              <option value="16" selected>16 pages</option>
+              <option value="24">24 pages</option>
+            </select>
+          </div>
+          <div>
+            <label class="block text-sm font-medium text-gray-700 mb-1">Paper</label>
+            <select id="paper-quality" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm">
+              <option value="standard" selected>Standard</option>
+              <option value="premium">Premium</option>
+            </select>
+          </div>
+        </div>
+
+        <div id="price-box" class="flex items-center justify-between rounded-lg bg-purple-50 px-4 py-3">
+          <span class="text-sm text-purple-900">Estimated price</span>
+          <span id="price-label" class="text-lg font-bold text-purple-700">—</span>
+        </div>
+      </div>
+
+      <div class="mt-6 flex justify-end">
+        <button id="to-2" class="bg-gray-900 text-white text-sm rounded-lg px-5 py-2 hover:bg-gray-700 transition-colors">
+          Next: hero photo →
+        </button>
+      </div>
+    </section>
+
+    <!-- STEP 2 -->
+    <section id="step-2" class="hidden bg-white border border-gray-200 rounded-xl shadow-sm p-6">
+      <h2 class="text-base font-bold mb-1">2 · Upload the hero's photo</h2>
+      <p class="text-xs text-gray-500 mb-4">1 to 3 clear photos of the same person's face. Used to keep the character consistent across pages.</p>
+
+      <div id="dropzone" class="dropzone border-2 border-dashed border-gray-300 rounded-xl p-8 text-center cursor-pointer hover:bg-gray-50 transition">
+        <input id="file-input" type="file" accept="image/*" multiple class="hidden" />
+        <div class="text-3xl mb-2">📸</div>
+        <p class="text-sm text-gray-600">Drop photos here or <span class="text-purple-600 font-medium">browse</span></p>
+        <p class="text-xs text-gray-400 mt-1">PNG or JPG, up to 12 MB each</p>
+      </div>
+
+      <div id="thumbs" class="flex gap-3 mt-4 flex-wrap"></div>
+
+      <div id="hero-result" class="hidden mt-6 flex items-center gap-4 p-4 bg-purple-50 rounded-lg">
+        <img id="portrait" class="w-20 h-20 rounded-lg object-cover border border-purple-200" />
+        <div>
+          <p class="text-sm font-medium text-purple-900">Hero character ready</p>
+          <p class="text-xs text-purple-600">Consistent reference portrait generated.</p>
+        </div>
+      </div>
+
+      <div class="mt-6 flex justify-between">
+        <button id="back-1" class="text-sm text-gray-600 hover:text-gray-900">← Back</button>
+        <button id="build-hero" class="bg-purple-600 text-white text-sm rounded-lg px-5 py-2 hover:bg-purple-700 transition-colors disabled:opacity-50 flex items-center gap-2">
+          <span id="build-hero-label">Build hero character</span>
+        </button>
+      </div>
+    </section>
+
+    <!-- STEP 3 -->
+    <section id="step-3" class="hidden bg-white border border-gray-200 rounded-xl shadow-sm p-6">
+      <h2 class="text-base font-bold mb-1">3 · Generate the storybook</h2>
+      <p class="text-xs text-gray-500 mb-4">Each page is drawn from the template, starring your hero.</p>
+
+      <button id="generate" class="bg-gray-900 text-white text-sm rounded-lg px-5 py-2 hover:bg-gray-700 transition-colors disabled:opacity-50 flex items-center gap-2">
+        <span id="generate-label">Generate book</span>
+      </button>
+
+      <div id="book-done" class="hidden mt-6 p-4 bg-green-50 rounded-lg">
+        <p class="text-sm font-medium text-green-900">📖 Book created</p>
+        <p class="text-xs text-green-700 mt-1">Saved to <code id="book-path" class="font-mono"></code>. It now appears on your dashboard.</p>
+        <img id="cover-preview" class="hidden mt-3 w-40 rounded-lg border border-green-200 shadow-sm" alt="Generated cover" />
+        <a id="open-book" href="#" class="inline-block mt-3 text-sm text-green-700 underline">Open book →</a>
+      </div>
+
+      <div class="mt-6">
+        <button id="back-2" class="text-sm text-gray-600 hover:text-gray-900">← Back</button>
+      </div>
+    </section>
+
+    <!-- Live log -->
+    <pre id="log" class="hidden mt-6 bg-gray-900 text-gray-100 text-xs rounded-lg p-4 max-h-56 overflow-auto whitespace-pre-wrap"></pre>
+  </main>
+
+  <div id="toast" class="hidden"></div>
+
+  <script>
+    const $ = (id) => document.getElementById(id);
+    const state = { templates: [], current: null, files: [], heroReady: false };
+
+    function toast(msg, type = 'info') {
+      const t = $('toast');
+      t.textContent = msg;
+      t.className = `fixed top-4 right-4 text-sm px-4 py-2 rounded-lg shadow-lg z-50 ${type === 'error' ? 'bg-red-500 text-white' : 'bg-gray-900 text-white'}`;
+      setTimeout(() => { t.className = 'hidden'; }, 3500);
+    }
+
+    function log(line) {
+      const el = $('log');
+      el.classList.remove('hidden');
+      el.textContent += line + '\n';
+      el.scrollTop = el.scrollHeight;
+    }
+
+    function setStep(n) {
+      [1, 2, 3].forEach((i) => {
+        $('step-' + i).classList.toggle('hidden', i !== n);
+        const dot = $('dot-' + i);
+        const active = i <= n;
+        dot.className = `step-dot w-7 h-7 rounded-full flex items-center justify-center text-xs ${active ? 'bg-purple-600 text-white' : 'bg-gray-200 text-gray-500'}`;
+      });
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+
+    function slugify(s) {
+      return s.toLowerCase().trim().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
+    }
+
+    // --- Load templates ---
+    async function init() {
+      const res = await fetch('/api/storyforge/templates');
+      state.templates = await res.json();
+      const sel = $('template');
+      sel.innerHTML = state.templates.map((t, i) => `<option value="${i}">${t.name}</option>`).join('');
+      sel.onchange = () => renderTemplate(state.templates[sel.value]);
+      if (state.templates.length) renderTemplate(state.templates[0]);
+      else toast('No templates found.', 'error');
+    }
+
+    function renderTemplate(tpl) {
+      state.current = tpl;
+      $('template-desc').textContent = `${tpl.pages} pages · ${tpl.mode === 'color' ? 'full color' : 'line art'} · ${tpl.art_style}`;
+      const box = $('variables');
+      box.innerHTML = tpl.variables.map((v) => {
+        if (v.type === 'select') {
+          const opts = (v.options || []).map((o) => `<option value="${o}">${o}</option>`).join('');
+          return `<div>
+            <label class="block text-sm font-medium text-gray-700 mb-1">${v.label}</label>
+            <select data-var="${v.key}" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm">${opts}</select>
+          </div>`;
+        }
+        return `<div>
+          <label class="block text-sm font-medium text-gray-700 mb-1">${v.label}</label>
+          <input data-var="${v.key}" type="text" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm" />
+        </div>`;
+      }).join('');
+      refreshPrice();
+    }
+
+    function collectVars() {
+      const out = {};
+      document.querySelectorAll('[data-var]').forEach((el) => { out[el.dataset.var] = el.value.trim(); });
+      return out;
+    }
+
+    function selectedLangs() {
+      return Array.from(document.querySelectorAll('.lang:checked')).map((el) => el.value);
+    }
+    function selectedPageCount() {
+      return parseInt($('page-count').value, 10);
+    }
+
+    async function refreshPrice() {
+      const isColor = state.current ? state.current.mode === 'color' : true;
+      const params = new URLSearchParams({
+        page_count: selectedPageCount(),
+        color: isColor,
+        paper_quality: $('paper-quality').value,
+        has_cover: true,
+      });
+      try {
+        const res = await fetch(`/api/pricing?${params.toString()}`);
+        if (!res.ok) { $('price-label').textContent = '—'; return; }
+        const data = await res.json();
+        const fmt = new Intl.NumberFormat(undefined, { style: 'currency', currency: data.currency || 'USD' });
+        $('price-label').textContent = fmt.format(data.price);
+      } catch { $('price-label').textContent = '—'; }
+    }
+
+    ['page-count', 'paper-quality'].forEach((id) => $(id).addEventListener('change', refreshPrice));
+
+    // --- Auto slug ---
+    $('title').addEventListener('input', () => {
+      if (!$('book-id').dataset.touched) $('book-id').value = slugify($('title').value);
+    });
+    $('book-id').addEventListener('input', () => { $('book-id').dataset.touched = '1'; });
+
+    // --- Step 1 -> 2 validation ---
+    $('to-2').onclick = () => {
+      if (!$('title').value.trim()) return toast('Give the book a title.', 'error');
+      const id = $('book-id').value.trim();
+      if (!/^[a-z0-9][a-z0-9-]*[a-z0-9]$/.test(id)) return toast('Book ID: lowercase letters, numbers, dashes.', 'error');
+      const vars = collectVars();
+      for (const v of state.current.variables) {
+        if (!vars[v.key]) return toast(`Fill in: ${v.label}`, 'error');
+      }
+      if (selectedLangs().length === 0) return toast('Select at least one language.', 'error');
+      setStep(2);
+    };
+    $('back-1').onclick = () => setStep(1);
+    $('back-2').onclick = () => setStep(2);
+
+    // --- Photo upload ---
+    const dz = $('dropzone');
+    dz.onclick = () => $('file-input').click();
+    dz.ondragover = (e) => { e.preventDefault(); dz.classList.add('drag'); };
+    dz.ondragleave = () => dz.classList.remove('drag');
+    dz.ondrop = (e) => { e.preventDefault(); dz.classList.remove('drag'); addFiles(e.dataTransfer.files); };
+    $('file-input').onchange = (e) => addFiles(e.target.files);
+
+    function addFiles(list) {
+      for (const f of list) {
+        if (state.files.length >= 3) { toast('Max 3 photos.', 'error'); break; }
+        if (!f.type.startsWith('image/')) continue;
+        state.files.push(f);
+      }
+      renderThumbs();
+    }
+
+    function renderThumbs() {
+      const box = $('thumbs');
+      box.innerHTML = '';
+      state.files.forEach((f, i) => {
+        const url = URL.createObjectURL(f);
+        const div = document.createElement('div');
+        div.className = 'relative';
+        div.innerHTML = `<img src="${url}" class="w-20 h-20 rounded-lg object-cover border border-gray-200" />
+          <button class="absolute -top-2 -right-2 bg-gray-900 text-white rounded-full w-5 h-5 text-xs leading-none">×</button>`;
+        div.querySelector('button').onclick = () => { state.files.splice(i, 1); renderThumbs(); };
+        box.appendChild(div);
+      });
+      $('build-hero').disabled = state.files.length === 0;
+    }
+    $('build-hero').disabled = true;
+
+    // --- Build hero ---
+    $('build-hero').onclick = async () => {
+      if (!state.files.length) return toast('Add at least one photo.', 'error');
+      const name = $('book-id').value.trim();
+      const btn = $('build-hero');
+      btn.disabled = true;
+      $('build-hero-label').innerHTML = '<span class="inline-block w-4 h-4 border-2 border-white border-t-transparent rounded-full spin"></span> Uploading...';
+
+      const fd = new FormData();
+      state.files.forEach((f) => fd.append('photos', f));
+      const up = await fetch(`/api/storyforge/${name}/photos`, { method: 'POST', body: fd });
+      if (!up.ok) {
+        const e = await up.json().catch(() => ({}));
+        btn.disabled = false; $('build-hero-label').textContent = 'Build hero character';
+        return toast('Upload failed: ' + (e.detail || up.status), 'error');
+      }
+
+      $('build-hero-label').innerHTML = '<span class="inline-block w-4 h-4 border-2 border-white border-t-transparent rounded-full spin"></span> Building hero...';
+      $('log').textContent = '';
+      const es = new EventSource(`/stream/storyforge/${name}/hero?slug=${encodeURIComponent(state.current.slug)}`);
+      es.onmessage = (ev) => {
+        if (ev.data === '[DONE]') {
+          es.close();
+          state.heroReady = true;
+          $('portrait').src = `/api/storyforge/${name}/portrait?t=${Date.now()}`;
+          $('hero-result').classList.remove('hidden');
+          $('build-hero-label').textContent = 'Rebuild hero';
+          btn.disabled = false;
+          toast('Hero ready! Continue to generate.');
+          showNext3();
+          return;
+        }
+        if (ev.data.startsWith('ERROR:')) {
+          es.close();
+          btn.disabled = false; $('build-hero-label').textContent = 'Build hero character';
+          return toast(ev.data, 'error');
+        }
+        log(ev.data);
+      };
+      es.onerror = () => { es.close(); btn.disabled = false; $('build-hero-label').textContent = 'Build hero character'; };
+    };
+
+    function showNext3() {
+      if ($('to-3')) return;
+      const b = document.createElement('button');
+      b.id = 'to-3';
+      b.className = 'ml-3 bg-gray-900 text-white text-sm rounded-lg px-5 py-2 hover:bg-gray-700 transition-colors';
+      b.textContent = 'Next: generate →';
+      b.onclick = () => setStep(3);
+      $('build-hero').after(b);
+    }
+
+    // --- Generate ---
+    $('generate').onclick = () => {
+      if (!state.heroReady) return toast('Build the hero first.', 'error');
+      const name = $('book-id').value.trim();
+      const params = new URLSearchParams({
+        slug: state.current.slug,
+        title: $('title').value.trim(),
+        author: $('author').value.trim(),
+        languages: selectedLangs().join(','),
+        page_count: selectedPageCount(),
+        ...collectVars(),
+      });
+      const btn = $('generate');
+      btn.disabled = true;
+      $('generate-label').innerHTML = '<span class="inline-block w-4 h-4 border-2 border-white border-t-transparent rounded-full spin"></span> Generating...';
+      $('log').textContent = '';
+      const es = new EventSource(`/stream/storyforge/${name}/generate?${params.toString()}`);
+      es.onmessage = (ev) => {
+        if (ev.data === '[DONE]') {
+          es.close();
+          $('book-path').textContent = `books/${name}/`;
+          $('open-book').href = `/book/${name}`;
+          const cover = $('cover-preview');
+          cover.src = `/api/storyforge/${name}/cover?t=${Date.now()}`;
+          cover.classList.remove('hidden');
+          $('book-done').classList.remove('hidden');
+          $('generate-label').textContent = 'Regenerate';
+          btn.disabled = false;
+          toast('Storybook created!');
+          return;
+        }
+        if (ev.data.startsWith('ERROR:')) {
+          es.close();
+          btn.disabled = false; $('generate-label').textContent = 'Generate book';
+          return toast(ev.data, 'error');
+        }
+        log(ev.data);
+      };
+      es.onerror = () => { es.close(); btn.disabled = false; $('generate-label').textContent = 'Generate book'; };
+    };
+
+    init();
+  </script>
+</body>
+
+</html>

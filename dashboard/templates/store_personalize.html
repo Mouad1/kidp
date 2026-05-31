@@ -1,0 +1,140 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>{{ title }} · StoryForge</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .spin { animation: spin .8s linear infinite; }
+  </style>
+</head>
+
+<body class="bg-gray-50 text-gray-900 min-h-screen">
+
+  <header class="bg-white border-b border-gray-200 px-6 py-4">
+    <div class="max-w-3xl mx-auto flex items-center justify-between">
+      <div class="flex items-center gap-3">
+        <span class="text-2xl">✨</span>
+        <h1 class="text-lg font-bold">StoryForge</h1>
+      </div>
+      <a href="/store" class="text-sm text-gray-600 hover:text-gray-900">← All stories</a>
+    </div>
+  </header>
+
+  <main class="max-w-3xl mx-auto px-6 py-10" data-slug="{{ slug }}">
+    <h2 class="text-2xl font-bold mb-1">{{ title }}</h2>
+    <p class="text-gray-500 mb-8">{{ page_count }} pages, personalized for your child.</p>
+
+    <!-- Step 1: child details -->
+    <section id="step-details" class="bg-white rounded-xl border border-gray-200 p-6 mb-6">
+      <h3 class="font-bold mb-4">1. Your child</h3>
+      <label class="block text-sm font-medium mb-1">Child's first name</label>
+      <input id="child-name" type="text" placeholder="e.g. Lina"
+             class="w-full border border-gray-300 rounded-lg px-3 py-2 mb-4" />
+      <label class="block text-sm font-medium mb-1">Photo</label>
+      <input id="child-photo" type="file" accept="image/*"
+             class="w-full text-sm mb-4" />
+      <button id="to-preview"
+              class="bg-purple-600 text-white font-medium px-5 py-2 rounded-lg hover:bg-purple-700 disabled:opacity-50">
+        Preview my book
+      </button>
+    </section>
+
+    <!-- Step 2: preview -->
+    <section id="step-preview" class="hidden bg-white rounded-xl border border-gray-200 p-6 mb-6">
+      <h3 class="font-bold mb-4">2. Preview</h3>
+      <div id="preview-status" class="text-sm text-gray-500 mb-4">Preparing your preview...</div>
+      <img id="preview-cover" alt="Cover preview"
+           class="hidden w-48 rounded-lg border border-gray-200 mb-4" />
+      <div id="preview-pages" class="text-sm text-gray-700"></div>
+    </section>
+
+    <!-- Step 3: checkout -->
+    <section id="step-checkout" class="hidden bg-white rounded-xl border border-gray-200 p-6">
+      <h3 class="font-bold mb-4">3. Order</h3>
+      <div id="auth-box">
+        <p class="text-sm text-gray-500 mb-3">Enter your email to receive a confirmation code.</p>
+        <div class="flex gap-2 mb-3">
+          <input id="email" type="email" placeholder="you@example.com"
+                 class="flex-1 border border-gray-300 rounded-lg px-3 py-2" />
+          <button id="send-code"
+                  class="bg-gray-900 text-white px-4 py-2 rounded-lg hover:bg-gray-700">Send code</button>
+        </div>
+        <div id="code-row" class="hidden flex gap-2 mb-3">
+          <input id="code" type="text" inputmode="numeric" placeholder="6 digit code"
+                 class="flex-1 border border-gray-300 rounded-lg px-3 py-2" />
+          <button id="verify-code"
+                  class="bg-gray-900 text-white px-4 py-2 rounded-lg hover:bg-gray-700">Verify</button>
+        </div>
+      </div>
+      <div id="pay-box" class="hidden">
+        <button id="checkout"
+                class="bg-purple-600 text-white font-medium px-5 py-2 rounded-lg hover:bg-purple-700">
+          Continue to payment
+        </button>
+      </div>
+      <div id="checkout-status" class="text-sm text-gray-500 mt-3"></div>
+    </section>
+  </main>
+
+  <script>
+    const slug = document.querySelector("main").dataset.slug;
+    const $ = (id) => document.getElementById(id);
+
+    $("to-preview").addEventListener("click", () => {
+      if (!$("child-name").value.trim()) { alert("Please enter your child's name."); return; }
+      $("step-preview").classList.remove("hidden");
+      $("step-checkout").classList.remove("hidden");
+      // Preview is illustrative in this build: show the published cover if present.
+      $("preview-status").textContent =
+        "Your book stars " + $("child-name").value.trim() + ". Final art is generated after checkout.";
+      const img = $("preview-cover");
+      img.src = "/api/storyforge/" + slug + "/cover?t=" + Date.now();
+      img.onload = () => img.classList.remove("hidden");
+      $("step-checkout").scrollIntoView({ behavior: "smooth" });
+    });
+
+    $("send-code").addEventListener("click", async () => {
+      const email = $("email").value.trim();
+      if (!email) { alert("Enter your email."); return; }
+      const r = await fetch("/store/auth/request", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email }),
+      });
+      if (r.ok) { $("code-row").classList.remove("hidden"); }
+      else { alert("Could not send code. Check the email address."); }
+    });
+
+    $("verify-code").addEventListener("click", async () => {
+      const email = $("email").value.trim();
+      const code = $("code").value.trim();
+      const r = await fetch("/store/auth/verify", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email, code }),
+      });
+      if (r.ok) {
+        $("auth-box").classList.add("hidden");
+        $("pay-box").classList.remove("hidden");
+      } else { alert("Invalid or expired code."); }
+    });
+
+    $("checkout").addEventListener("click", async () => {
+      $("checkout-status").textContent = "Creating your order...";
+      const r = await fetch("/store/" + slug + "/checkout", { method: "POST" });
+      if (r.ok) {
+        const data = await r.json();
+        $("checkout-status").textContent =
+          "Order " + data.reference + " created (" +
+          (data.amount / 100).toFixed(2) + " " + data.currency + "). Redirecting...";
+        window.location.href = data.url;
+      } else {
+        $("checkout-status").textContent = "Please sign in first.";
+      }
+    });
+  </script>
+
+</body>
+</html>

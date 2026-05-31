@@ -60,6 +60,11 @@
                   class="flex items-center gap-1.5 bg-yellow-500 text-white text-xs rounded-lg px-3 py-2 hover:bg-yellow-600">
             🖼 Cover
           </button>
+          <button id="publishBtn" onclick="togglePublish()"
+                  class="flex items-center gap-1.5 text-white text-xs rounded-lg px-3 py-2
+                         {% if book.published %}bg-emerald-600 hover:bg-emerald-700{% else %}bg-gray-400 hover:bg-gray-500{% endif %}">
+            {% if book.published %}🌐 Published{% else %}🔒 Unpublished{% endif %}
+          </button>
         </div>
       </div>
     </div>
@@ -193,6 +198,21 @@
 <script>
     const BOOK_NAME = '{{ book_name }}';
     let configData = null;
+
+    async function togglePublish() {
+      const btn = document.getElementById('publishBtn');
+      const makePublished = btn.textContent.includes('Unpublished');
+      const res = await fetch(`/api/storyforge/${BOOK_NAME}/publish?published=${makePublished}`,
+                              { method: 'POST' });
+      if (!res.ok) { alert('Could not update publish state.'); return; }
+      if (makePublished) {
+        btn.textContent = '🌐 Published';
+        btn.className = 'flex items-center gap-1.5 text-white text-xs rounded-lg px-3 py-2 bg-emerald-600 hover:bg-emerald-700';
+      } else {
+        btn.textContent = '🔒 Unpublished';
+        btn.className = 'flex items-center gap-1.5 text-white text-xs rounded-lg px-3 py-2 bg-gray-400 hover:bg-gray-500';
+      }
+    }
 
     // ── Prompt Builder state ────────────────────────────────────────────────────
     let allTags = null;

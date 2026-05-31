@@ -15,6 +15,7 @@ import importlib.util
 import os
 import pathlib
 import re
+import secrets
 import shutil
 import subprocess
 import sys
@@ -24,7 +25,7 @@ from typing import Optional
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent.parent))
 
 from fastapi import FastAPI, HTTPException, Request, Form, UploadFile, File
-from fastapi.responses import FileResponse, HTMLResponse, StreamingResponse
+from fastapi.responses import FileResponse, HTMLResponse, StreamingResponse, JSONResponse
 from fastapi.templating import Jinja2Templates
 from PIL import Image, UnidentifiedImageError
 from pydantic import BaseModel
@@ -39,6 +40,15 @@ from storyforge.builder import build_book as _sf_build_book
 from storyforge.i18n import translate_pages as _sf_translate_pages
 from storyforge.expand import expand_narrative as _sf_expand_narrative
 from storyforge.cover import generate_cover as _sf_generate_cover
+
+from storefront.auth import (
+    request_code as _sf_request_code, verify_code as _sf_verify_code,
+    AuthStore as _SfAuthStore, FakeCodeSender as _SfFakeCodeSender,
+    SmtpCodeSender as _SfSmtpCodeSender,
+)
+from storefront.session import sign as _sf_sign_session, verify as _sf_verify_session
+from storefront.catalog import list_catalog as _sf_list_catalog
+from storefront.payment import get_payment_provider as _sf_get_payment_provider
 
 ROOT = pathlib.Path(__file__).parent.parent
 sys.path.insert(0, str(ROOT))
@@ -198,6 +208,7 @@ def _book_status(book_name: str) -> dict:
         "name":           book_name,
         "title":          getattr(cfg, "TITLE", book_name),
         "author":         getattr(cfg, "AUTHOR", ""),
+        "published":      getattr(cfg, "PUBLISHED", False),
         "total_chars":    len(characters),
         "in_sequence":    len(sequence),
         "present":        len(images_present),
@@ -1222,6 +1233,163 @@ def storyforge_cover(name: str):
         headers={"Cache-Control": "no-store, no-cache, must-revalidate, max-age=0"},
     )
 
+
+
+# ========================================================
+# STOREFRONT (customer-facing) ROUTES
+# ========================================================
+import datetime as _dt
+
+_SF_SESSION_MAX_AGE = 86400  # 24h
+
+
+def _load_storefront_settings() -> dict:
+    settings_file = ROOT / "settings.json"
+    if settings_file.exists():
+        try:
+            data = json.loads(settings_file.read_text())
+            sf = data.get("storefront")
+            if isinstance(sf, dict):
+                return sf
+        except (json.JSONDecodeError, OSError):
+            pass
+    return {}
+
+
+def _store_session_secret() -> str:
+    secret = (_load_storefront_settings().get("session_secret") or "").strip()
+    if not secret:
+        secret = os.environ.get("STOREFRONT_SESSION_SECRET", "").strip()
+    return secret or "dev-insecure-secret-change-me"
+
+
+def _store_auth_store() -> _SfAuthStore:
+    return _SfAuthStore(ROOT / ".storefront" / "auth.json")
+
+
+def _store_code_sender():
+    sf = _load_storefront_settings()
+    smtp = sf.get("smtp") or {}
+    host = (smtp.get("host") or "").strip()
+    if host:
+        return _SfSmtpCodeSender(
+            host=host, port=int(smtp.get("port", 587)),
+            username=smtp.get("username", ""), password=smtp.get("password", ""),
+            from_addr=smtp.get("from_addr", "no-reply@example.com"),
+            use_tls=bool(smtp.get("use_tls", True)),
+        )
+    return _SfFakeCodeSender()
+
+
+def _store_catalog_names() -> list[str]:
+    return _list_books()
+
+
+def _store_read_config(name: str) -> dict:
+    return read_config(name)
+
+
+def _require_session(request: Request) -> dict | None:
+    token = request.cookies.get("sf_session")
+    if not token:
+        return None
+    return _sf_verify_session(token, _store_session_secret(),
+                              max_age=_SF_SESSION_MAX_AGE, now=_dt.datetime.utcnow())
+
+
+@app.get("/store", response_class=HTMLResponse)
+def store_catalog(request: Request):
+    entries = _sf_list_catalog(_store_catalog_names(), _store_read_config)
+    return templates.TemplateResponse(
+        request=request, name="store_catalog.html",
+        context={"entries": entries},
+    )
+
+
+@app.post("/store/auth/request")
+async def store_auth_request(request: Request):
+    body = await request.json()
+    email = (body.get("email") or "").strip().lower()
+    if not re.match(r"^[^@\s]+@[^@\s]+\.[^@\s]+$", email):
+        raise HTTPException(status_code=400, detail="Invalid email address.")
+    _sf_request_code(email, now=_dt.datetime.utcnow(),
+                     code_sender=_store_code_sender(), store=_store_auth_store())
+    return JSONResponse({"sent": True})
+
+
+@app.post("/store/auth/verify")
+async def store_auth_verify(request: Request):
+    body = await request.json()
+    email = (body.get("email") or "").strip().lower()
+    code = (body.get("code") or "").strip()
+    ok = _sf_verify_code(email, code, now=_dt.datetime.utcnow(), store=_store_auth_store())
+    if not ok:
+        raise HTTPException(status_code=401, detail="Invalid or expired code.")
+    token = _sf_sign_session({"email": email}, _store_session_secret(),
+                             now=_dt.datetime.utcnow())
+    resp = JSONResponse({"authenticated": True})
+    resp.set_cookie("sf_session", token, httponly=True, samesite="lax",
+                    max_age=_SF_SESSION_MAX_AGE)
+    return resp
+
+
+@app.get("/store/{slug}", response_class=HTMLResponse)
+def store_personalize(slug: str, request: Request):
+    if not re.match(r'^[a-z0-9][a-z0-9-]*[a-z0-9]$', slug):
+        raise HTTPException(status_code=400, detail="Invalid book name")
+    try:
+        cfg = _store_read_config(slug)
+    except FileNotFoundError:
+        raise HTTPException(status_code=404, detail="Book not found.")
+    if not cfg.get("published"):
+        raise HTTPException(status_code=404, detail="Book not found.")
+    return templates.TemplateResponse(
+        request=request, name="store_personalize.html",
+        context={"slug": slug, "title": cfg.get("title", slug),
+                 "page_count": len(cfg.get("pages", []))},
+    )
+
+
+@app.post("/store/{slug}/checkout")
+async def store_checkout(slug: str, request: Request):
+    if not re.match(r'^[a-z0-9][a-z0-9-]*[a-z0-9]$', slug):
+        raise HTTPException(status_code=400, detail="Invalid book name")
+    session = _require_session(request)
+    if session is None:
+        raise HTTPException(status_code=401, detail="Sign in to continue.")
+    try:
+        cfg = _store_read_config(slug)
+    except FileNotFoundError:
+        raise HTTPException(status_code=404, detail="Book not found.")
+    if not cfg.get("published"):
+        raise HTTPException(status_code=404, detail="Book not found.")
+
+    from pipeline.pricing import compute_price
+    page_count = len(cfg.get("pages", []))
+    quote = compute_price(page_count, color=True, paper_quality="standard",
+                          has_cover=True, settings=_load_pricing_settings())
+    amount_cents = int(round(quote["price"] * 100))
+    provider = _sf_get_payment_provider(_load_storefront_settings())
+    reference = f"{slug}-{secrets.token_hex(6)}"
+    checkout = provider.create_checkout(
+        amount=amount_cents, currency=quote["currency"], reference=reference)
+    return JSONResponse({
+        "reference": checkout.reference, "amount": checkout.amount,
+        "currency": checkout.currency, "status": checkout.status, "url": checkout.url,
+    })
+
+
+@app.post("/api/storyforge/{name}/publish")
+def storyforge_publish(name: str, published: bool = True):
+    if not re.match(r'^[a-z0-9][a-z0-9-]*[a-z0-9]$', name):
+        raise HTTPException(status_code=400, detail="Invalid book name")
+    try:
+        cfg = read_config(name)
+    except FileNotFoundError:
+        raise HTTPException(status_code=404, detail="Book not found.")
+    cfg["published"] = published
+    write_config(name, cfg)
+    return {"name": name, "published": published}
 
 
 if __name__ == "__main__":

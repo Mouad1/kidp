@@ -21,6 +21,9 @@ __pycache__/
 .env.local
 settings.json
 
+# Storefront runtime auth store (one-time codes)
+.storefront/
+
 # Node
 node_modules/
 

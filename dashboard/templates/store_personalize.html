@@ -83,14 +83,15 @@
   <script>
     const slug = document.querySelector("main").dataset.slug;
     const $ = (id) => document.getElementById(id);
+    let orderRef = null;
 
     $("to-preview").addEventListener("click", () => {
       if (!$("child-name").value.trim()) { alert("Please enter your child's name."); return; }
+      if (!$("child-photo").files.length) { alert("Please add a photo."); return; }
       $("step-preview").classList.remove("hidden");
       $("step-checkout").classList.remove("hidden");
-      // Preview is illustrative in this build: show the published cover if present.
       $("preview-status").textContent =
-        "Your book stars " + $("child-name").value.trim() + ". Final art is generated after checkout.";
+        "Your book stars " + $("child-name").value.trim() + ". Sign in to place your order.";
       const img = $("preview-cover");
       img.src = "/api/storyforge/" + slug + "/cover?t=" + Date.now();
       img.onload = () => img.classList.remove("hidden");
@@ -123,12 +124,26 @@
 
     $("checkout").addEventListener("click", async () => {
       $("checkout-status").textContent = "Creating your order...";
-      const r = await fetch("/store/" + slug + "/checkout", { method: "POST" });
+      // Step 1: upload photo + details to create the order.
+      if (!orderRef) {
+        const fd = new FormData();
+        fd.append("child_name", $("child-name").value.trim());
+        fd.append("photo", $("child-photo").files[0]);
+        const ro = await fetch("/store/" + slug + "/order", { method: "POST", body: fd });
+        if (!ro.ok) { $("checkout-status").textContent = "Could not create the order. Please sign in and try again."; return; }
+        const od = await ro.json();
+        orderRef = od.reference;
+      }
+      // Step 2: settle payment for the order.
+      const r = await fetch("/store/" + slug + "/checkout", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ reference: orderRef }),
+      });
       if (r.ok) {
         const data = await r.json();
         $("checkout-status").textContent =
-          "Order " + data.reference + " created (" +
-          (data.amount / 100).toFixed(2) + " " + data.currency + "). Redirecting...";
+          "Order " + data.reference + " confirmed (" +
+          (data.amount / 100).toFixed(2) + " " + data.currency + ", " + data.status + ").";
         window.location.href = data.url;
       } else {
         $("checkout-status").textContent = "Please sign in first.";

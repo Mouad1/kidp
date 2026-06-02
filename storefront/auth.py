@@ -92,6 +92,40 @@ class AuthStore:
         self._save(data)
 
 
+class SqliteAuthStore:
+    """AuthStore backed by the shared SQLite database (auth_codes table)."""
+
+    def __init__(self, db):
+        self.db = db
+
+    def put(self, rec: CodeRecord) -> None:
+        self.db.execute(
+            "INSERT INTO auth_codes (email, code_hash, salt, expires_at, attempts) "
+            "VALUES (?,?,?,?,?) "
+            "ON CONFLICT(email) DO UPDATE SET "
+            "code_hash=excluded.code_hash, salt=excluded.salt, "
+            "expires_at=excluded.expires_at, attempts=excluded.attempts",
+            (rec.email, rec.code_hash, rec.salt, rec.expires_at, rec.attempts),
+        )
+
+    def get(self, email: str) -> CodeRecord | None:
+        row = self.db.query_one(
+            "SELECT email, code_hash, salt, expires_at, attempts "
+            "FROM auth_codes WHERE email = ?",
+            (email,),
+        )
+        if not row:
+            return None
+        return CodeRecord(
+            email=row["email"], code_hash=row["code_hash"], salt=row["salt"],
+            expires_at=row["expires_at"], attempts=row["attempts"],
+        )
+
+    def delete(self, email: str) -> None:
+        self.db.execute("DELETE FROM auth_codes WHERE email = ?", (email,))
+
+
+
 def request_code(email: str, now: dt.datetime, code_sender: CodeSender,
                  store: AuthStore, ttl_seconds: int = 600) -> None:
     code = generate_code()

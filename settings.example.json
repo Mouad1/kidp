@@ -20,6 +20,13 @@
     },
     "storefront": {
         "session_secret": "CHANGE_ME_TO_A_LONG_RANDOM_STRING",
+        "https": false,
+        "admin": {
+            "enabled": false,
+            "emails": [
+                "you@example.com"
+            ]
+        },
         "payment_provider": "stub",
         "smtp": {
             "host": "",

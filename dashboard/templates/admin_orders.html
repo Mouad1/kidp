@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Orders · Admin</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+</head>
+
+<body class="bg-gray-50 text-gray-900 min-h-screen">
+  <header class="bg-white border-b border-gray-200 px-6 py-4">
+    <div class="max-w-5xl mx-auto flex items-center justify-between">
+      <div class="flex items-center gap-3">
+        <span class="text-2xl">📦</span>
+        <h1 class="text-lg font-bold">Orders</h1>
+      </div>
+      <a href="/" class="text-sm text-indigo-600 hover:text-indigo-800">← Dashboard</a>
+    </div>
+  </header>
+
+  <main class="max-w-5xl mx-auto px-6 py-8">
+    {% if not orders %}
+    <div class="bg-white border border-dashed border-gray-300 rounded-xl p-12 text-center text-gray-500">
+      No orders yet.
+    </div>
+    {% else %}
+    <table class="w-full bg-white rounded-xl border border-gray-200 overflow-hidden text-sm">
+      <thead class="bg-gray-50 text-gray-500 text-left">
+        <tr>
+          <th class="px-4 py-3">Photo</th>
+          <th class="px-4 py-3">Child</th>
+          <th class="px-4 py-3">Book</th>
+          <th class="px-4 py-3">Pages</th>
+          <th class="px-4 py-3">Amount</th>
+          <th class="px-4 py-3">Status</th>
+          <th class="px-4 py-3">Email</th>
+          <th class="px-4 py-3">Created</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for o in orders %}
+        <tr class="border-t border-gray-100">
+          <td class="px-4 py-3">
+            <img src="/admin/orders/{{ o.reference }}/photo"
+                 class="w-12 h-12 object-cover rounded-lg border border-gray-200" alt="photo" />
+          </td>
+          <td class="px-4 py-3 font-medium">{{ o.child_name }}</td>
+          <td class="px-4 py-3">{{ o.slug }}</td>
+          <td class="px-4 py-3">{{ o.page_count }}</td>
+          <td class="px-4 py-3">{{ "%.2f"|format(o.amount_cents / 100) }} {{ o.currency }}</td>
+          <td class="px-4 py-3">
+            <span class="px-2 py-1 rounded-full text-xs font-semibold
+              {% if o.status == 'paid' %}bg-emerald-100 text-emerald-700
+              {% elif o.status == 'failed' %}bg-red-100 text-red-700
+              {% else %}bg-amber-100 text-amber-700{% endif %}">{{ o.status }}</span>
+          </td>
+          <td class="px-4 py-3 text-gray-500">{{ o.email }}</td>
+          <td class="px-4 py-3 text-gray-400">{{ o.created_at[:16] }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    {% endif %}
+  </main>
+</body>
+</html>

@@ -25,7 +25,7 @@ from typing import Optional
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent.parent))
 
 from fastapi import FastAPI, HTTPException, Request, Form, UploadFile, File
-from fastapi.responses import FileResponse, HTMLResponse, StreamingResponse, JSONResponse
+from fastapi.responses import FileResponse, HTMLResponse, StreamingResponse, JSONResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 from PIL import Image, UnidentifiedImageError
 from pydantic import BaseModel
@@ -43,12 +43,18 @@ from storyforge.cover import generate_cover as _sf_generate_cover
 
 from storefront.auth import (
     request_code as _sf_request_code, verify_code as _sf_verify_code,
-    AuthStore as _SfAuthStore, FakeCodeSender as _SfFakeCodeSender,
-    SmtpCodeSender as _SfSmtpCodeSender,
+    AuthStore as _SfAuthStore, SqliteAuthStore as _SfSqliteAuthStore,
+    FakeCodeSender as _SfFakeCodeSender, SmtpCodeSender as _SfSmtpCodeSender,
 )
 from storefront.session import sign as _sf_sign_session, verify as _sf_verify_session
 from storefront.catalog import list_catalog as _sf_list_catalog
 from storefront.payment import get_payment_provider as _sf_get_payment_provider
+from storefront.db import (
+    Database as _SfDatabase, new_reference as _sf_new_reference,
+    create_order as _sf_create_order, get_order as _sf_get_order,
+    set_order_status as _sf_set_order_status, list_orders as _sf_list_orders,
+)
+from storefront.admin import seed_admins as _sf_seed_admins, is_admin as _sf_is_admin
 
 ROOT = pathlib.Path(__file__).parent.parent
 sys.path.insert(0, str(ROOT))
@@ -239,6 +245,8 @@ import os
 
 @app.get("/settings")
 def view_settings(request: Request):
+    if _require_admin(request) is None:
+        return RedirectResponse(url="/admin/login", status_code=303)
     settings_file = ROOT / "settings.json"
     settings_data = {}
     if settings_file.exists():
@@ -294,12 +302,16 @@ def delete_book(book_name: str):
 
 @app.get("/", response_class=HTMLResponse)
 async def index(request: Request):
+    if _require_admin(request) is None:
+        return RedirectResponse(url="/admin/login", status_code=303)
     books = [_book_status(b) for b in _list_books()]
     return templates.TemplateResponse(request=request, name="index.html", context={"books": books})
 
 
 @app.get("/book/{book_name}", response_class=HTMLResponse)
 async def book_detail(request: Request, book_name: str):
+    if _require_admin(request) is None:
+        return RedirectResponse(url="/admin/login", status_code=303)
     status = _book_status(book_name)
     if status.get("category") == "story":
         return templates.TemplateResponse(request=request, name="story.html", context={"book": status, "book_name": book_name})
@@ -1079,6 +1091,8 @@ def _normalize_photo_to_png(data: bytes) -> bytes:
 
 @app.get("/storybook", response_class=HTMLResponse)
 def storybook_page(request: Request):
+    if _require_admin(request) is None:
+        return RedirectResponse(url="/admin/login", status_code=303)
     return templates.TemplateResponse(request=request, name="storybook.html", context={})
 
 
@@ -1241,6 +1255,8 @@ def storyforge_cover(name: str):
 import datetime as _dt
 
 _SF_SESSION_MAX_AGE = 86400  # 24h
+_SF_ADMIN_MAX_AGE = 86400  # 24h
+_SF_DB_HOLDER: dict = {}
 
 
 def _load_storefront_settings() -> dict:
@@ -1256,6 +1272,26 @@ def _load_storefront_settings() -> dict:
     return {}
 
 
+def _store_db() -> _SfDatabase:
+    """Lazily open and cache the SQLite database; seed admins from settings."""
+    db = _SF_DB_HOLDER.get("db")
+    if db is None:
+        db = _SfDatabase(ROOT / ".storefront" / "storefront.db")
+        admin_cfg = (_load_storefront_settings().get("admin") or {})
+        emails = admin_cfg.get("emails") or []
+        _sf_seed_admins(db, emails, now=_dt.datetime.utcnow())
+        _SF_DB_HOLDER["db"] = db
+    return db
+
+
+def _store_https() -> bool:
+    return bool(_load_storefront_settings().get("https", False))
+
+
+def _admin_enabled() -> bool:
+    return bool((_load_storefront_settings().get("admin") or {}).get("enabled", False))
+
+
 def _store_session_secret() -> str:
     secret = (_load_storefront_settings().get("session_secret") or "").strip()
     if not secret:
@@ -1263,8 +1299,8 @@ def _store_session_secret() -> str:
     return secret or "dev-insecure-secret-change-me"
 
 
-def _store_auth_store() -> _SfAuthStore:
-    return _SfAuthStore(ROOT / ".storefront" / "auth.json")
+def _store_auth_store():
+    return _SfSqliteAuthStore(_store_db())
 
 
 def _store_code_sender():
@@ -1329,7 +1365,7 @@ async def store_auth_verify(request: Request):
                              now=_dt.datetime.utcnow())
     resp = JSONResponse({"authenticated": True})
     resp.set_cookie("sf_session", token, httponly=True, samesite="lax",
-                    max_age=_SF_SESSION_MAX_AGE)
+                    secure=_store_https(), max_age=_SF_SESSION_MAX_AGE)
     return resp
 
 
@@ -1350,13 +1386,18 @@ def store_personalize(slug: str, request: Request):
     )
 
 
-@app.post("/store/{slug}/checkout")
-async def store_checkout(slug: str, request: Request):
+@app.post("/store/{slug}/order")
+async def store_create_order(slug: str, request: Request,
+                             child_name: str = Form(...),
+                             photo: UploadFile = File(...)):
     if not re.match(r'^[a-z0-9][a-z0-9-]*[a-z0-9]$', slug):
         raise HTTPException(status_code=400, detail="Invalid book name")
     session = _require_session(request)
     if session is None:
         raise HTTPException(status_code=401, detail="Sign in to continue.")
+    child = (child_name or "").strip()
+    if not child:
+        raise HTTPException(status_code=400, detail="Child name is required.")
     try:
         cfg = _store_read_config(slug)
     except FileNotFoundError:
@@ -1364,19 +1405,140 @@ async def store_checkout(slug: str, request: Request):
     if not cfg.get("published"):
         raise HTTPException(status_code=404, detail="Book not found.")
 
+    data = await photo.read()
+    if not data:
+        raise HTTPException(status_code=400, detail="Empty photo.")
+    if len(data) > 12 * 1024 * 1024:
+        raise HTTPException(status_code=400, detail="Photo too large (max 12 MB).")
+    png_data = _normalize_photo_to_png(data)
+
     from pipeline.pricing import compute_price
     page_count = len(cfg.get("pages", []))
     quote = compute_price(page_count, color=True, paper_quality="standard",
                           has_cover=True, settings=_load_pricing_settings())
     amount_cents = int(round(quote["price"] * 100))
+
+    db = _store_db()
+    reference = _sf_new_reference(slug)
+    order_dir = ROOT / ".storefront" / "orders" / reference
+    order_dir.mkdir(parents=True, exist_ok=True)
+    photo_path = order_dir / "photo.png"
+    photo_path.write_bytes(png_data)
+
+    _sf_create_order(
+        db, reference=reference, slug=slug, email=session["email"],
+        child_name=child, photo_path=str(photo_path), page_count=page_count,
+        amount_cents=amount_cents, currency=quote["currency"], now=_dt.datetime.utcnow(),
+    )
+    return JSONResponse({
+        "reference": reference, "amount": amount_cents,
+        "currency": quote["currency"], "status": "pending",
+    })
+
+
+@app.post("/store/{slug}/checkout")
+async def store_checkout(slug: str, request: Request):
+    if not re.match(r'^[a-z0-9][a-z0-9-]*[a-z0-9]$', slug):
+        raise HTTPException(status_code=400, detail="Invalid book name")
+    session = _require_session(request)
+    if session is None:
+        raise HTTPException(status_code=401, detail="Sign in to continue.")
+    body = await request.json()
+    reference = (body.get("reference") or "").strip()
+    if not reference:
+        raise HTTPException(status_code=400, detail="Missing order reference.")
+    db = _store_db()
+    order = _sf_get_order(db, reference)
+    if order is None or order["slug"] != slug:
+        raise HTTPException(status_code=404, detail="Order not found.")
+    if order["email"] != session["email"]:
+        raise HTTPException(status_code=403, detail="This order belongs to another account.")
+
     provider = _sf_get_payment_provider(_load_storefront_settings())
-    reference = f"{slug}-{secrets.token_hex(6)}"
     checkout = provider.create_checkout(
-        amount=amount_cents, currency=quote["currency"], reference=reference)
+        amount=order["amount_cents"], currency=order["currency"], reference=reference)
+    # Stub provider has no real charge, so the order is settled immediately.
+    _sf_set_order_status(db, reference, "paid", now=_dt.datetime.utcnow())
     return JSONResponse({
         "reference": checkout.reference, "amount": checkout.amount,
-        "currency": checkout.currency, "status": checkout.status, "url": checkout.url,
+        "currency": checkout.currency, "status": "paid", "url": checkout.url,
     })
+
+
+# ── Admin authentication (email allowlist + one-time code) ───────────────────────
+
+def _require_admin(request: Request) -> dict | None:
+    """Return admin session dict, or None. When admin auth is disabled, allow all."""
+    if not _admin_enabled():
+        return {"email": "local-admin", "admin": True}
+    token = request.cookies.get("sf_admin")
+    if not token:
+        return None
+    data = _sf_verify_session(token, _store_session_secret(),
+                              max_age=_SF_ADMIN_MAX_AGE, now=_dt.datetime.utcnow())
+    if not data or not data.get("admin"):
+        return None
+    return data
+
+
+@app.get("/admin/login", response_class=HTMLResponse)
+def admin_login(request: Request):
+    return templates.TemplateResponse(request=request, name="admin_login.html", context={})
+
+
+@app.post("/admin/auth/request")
+async def admin_auth_request(request: Request):
+    body = await request.json()
+    email = (body.get("email") or "").strip().lower()
+    if not re.match(r"^[^@\s]+@[^@\s]+\.[^@\s]+$", email):
+        raise HTTPException(status_code=400, detail="Invalid email address.")
+    if not _sf_is_admin(_store_db(), email):
+        raise HTTPException(status_code=403, detail="This email is not an administrator.")
+    _sf_request_code(email, now=_dt.datetime.utcnow(),
+                     code_sender=_store_code_sender(), store=_store_auth_store())
+    return JSONResponse({"sent": True})
+
+
+@app.post("/admin/auth/verify")
+async def admin_auth_verify(request: Request):
+    body = await request.json()
+    email = (body.get("email") or "").strip().lower()
+    code = (body.get("code") or "").strip()
+    if not _sf_is_admin(_store_db(), email):
+        raise HTTPException(status_code=403, detail="This email is not an administrator.")
+    ok = _sf_verify_code(email, code, now=_dt.datetime.utcnow(), store=_store_auth_store())
+    if not ok:
+        raise HTTPException(status_code=401, detail="Invalid or expired code.")
+    token = _sf_sign_session({"email": email, "admin": True}, _store_session_secret(),
+                             now=_dt.datetime.utcnow())
+    resp = JSONResponse({"authenticated": True})
+    resp.set_cookie("sf_admin", token, httponly=True, samesite="lax",
+                    secure=_store_https(), max_age=_SF_ADMIN_MAX_AGE)
+    return resp
+
+
+@app.get("/admin/orders", response_class=HTMLResponse)
+def admin_orders(request: Request):
+    if _require_admin(request) is None:
+        return RedirectResponse(url="/admin/login", status_code=303)
+    orders = _sf_list_orders(_store_db(), limit=200)
+    return templates.TemplateResponse(
+        request=request, name="admin_orders.html", context={"orders": orders},
+    )
+
+
+@app.get("/admin/orders/{reference}/photo")
+def admin_order_photo(reference: str, request: Request):
+    if _require_admin(request) is None:
+        raise HTTPException(status_code=401, detail="Admin sign in required.")
+    order = _sf_get_order(_store_db(), reference)
+    if order is None:
+        raise HTTPException(status_code=404, detail="Order not found.")
+    path = pathlib.Path(order["photo_path"])
+    if not path.exists():
+        raise HTTPException(status_code=404, detail="Photo not found.")
+    return FileResponse(str(path), media_type="image/png",
+                        headers={"Cache-Control": "no-store"})
 
 
 @app.post("/api/storyforge/{name}/publish")

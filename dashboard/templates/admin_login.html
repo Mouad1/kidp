@@ -1,0 +1,63 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Admin sign in</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+</head>
+
+<body class="bg-gray-100 text-gray-900 min-h-screen flex items-center justify-center">
+  <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-8 w-full max-w-sm">
+    <h1 class="text-lg font-bold mb-1">Admin sign in</h1>
+    <p class="text-sm text-gray-500 mb-6">Enter your email to receive a one-time code.</p>
+
+    <label class="block text-sm font-medium mb-1">Email</label>
+    <input id="email" type="email" placeholder="you@example.com"
+           class="w-full border border-gray-300 rounded-lg px-3 py-2 mb-3" />
+    <button id="send" class="w-full bg-gray-900 text-white rounded-lg py-2 hover:bg-gray-700">
+      Send code
+    </button>
+
+    <div id="code-row" class="hidden mt-4">
+      <label class="block text-sm font-medium mb-1">Code</label>
+      <input id="code" type="text" inputmode="numeric" placeholder="6 digit code"
+             class="w-full border border-gray-300 rounded-lg px-3 py-2 mb-3" />
+      <button id="verify" class="w-full bg-indigo-600 text-white rounded-lg py-2 hover:bg-indigo-700">
+        Verify and enter
+      </button>
+    </div>
+
+    <p id="msg" class="text-sm text-red-600 mt-3"></p>
+  </div>
+
+  <script>
+    const $ = (id) => document.getElementById(id);
+    $("send").addEventListener("click", async () => {
+      $("msg").textContent = "";
+      const r = await fetch("/admin/auth/request", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: $("email").value.trim() }),
+      });
+      if (r.ok) { $("code-row").classList.remove("hidden"); }
+      else {
+        const d = await r.json().catch(() => ({}));
+        $("msg").textContent = d.detail || "Could not send code.";
+      }
+    });
+    $("verify").addEventListener("click", async () => {
+      $("msg").textContent = "";
+      const r = await fetch("/admin/auth/verify", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: $("email").value.trim(), code: $("code").value.trim() }),
+      });
+      if (r.ok) { window.location.href = "/"; }
+      else {
+        const d = await r.json().catch(() => ({}));
+        $("msg").textContent = d.detail || "Invalid or expired code.";
+      }
+    });
+  </script>
+</body>
+</html>

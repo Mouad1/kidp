@@ -45,6 +45,7 @@ from storefront.auth import (
     request_code as _sf_request_code, verify_code as _sf_verify_code,
     AuthStore as _SfAuthStore, SqliteAuthStore as _SfSqliteAuthStore,
     FakeCodeSender as _SfFakeCodeSender, SmtpCodeSender as _SfSmtpCodeSender,
+    ResendCodeSender as _SfResendCodeSender,
 )
 from storefront.session import sign as _sf_sign_session, verify as _sf_verify_session
 from storefront.catalog import list_catalog as _sf_list_catalog
@@ -1257,6 +1258,7 @@ import datetime as _dt
 _SF_SESSION_MAX_AGE = 86400  # 24h
 _SF_ADMIN_MAX_AGE = 86400  # 24h
 _SF_DB_HOLDER: dict = {}
+_SF_SECRET_CACHE: str | None = None
 
 
 def _load_storefront_settings() -> dict:
@@ -1293,10 +1295,34 @@ def _admin_enabled() -> bool:
 
 
 def _store_session_secret() -> str:
+    global _SF_SECRET_CACHE
+    if _SF_SECRET_CACHE:
+        return _SF_SECRET_CACHE
+
     secret = (_load_storefront_settings().get("session_secret") or "").strip()
     if not secret:
         secret = os.environ.get("STOREFRONT_SESSION_SECRET", "").strip()
-    return secret or "dev-insecure-secret-change-me"
+    if not secret:
+        secret = os.environ.get("SESSION_SECRET", "").strip()
+
+    secret_file = ROOT / ".storefront" / "session_secret.txt"
+    if not secret and secret_file.exists():
+        try:
+            secret = secret_file.read_text(encoding="utf-8").strip()
+        except OSError:
+            secret = ""
+
+    if not secret:
+        secret = secrets.token_urlsafe(48)
+        try:
+            secret_file.parent.mkdir(parents=True, exist_ok=True)
+            secret_file.write_text(secret, encoding="utf-8")
+        except OSError:
+            # Keep running even if we cannot persist in this environment.
+            pass
+
+    _SF_SECRET_CACHE = secret
+    return secret
 
 
 def _store_auth_store():
@@ -1306,12 +1332,36 @@ def _store_auth_store():
 def _store_code_sender():
     sf = _load_storefront_settings()
     smtp = sf.get("smtp") or {}
-    host = (smtp.get("host") or "").strip()
+    resend_api_key = os.environ.get("RESEND_API_KEY", "").strip()
+    resend_from_addr = (
+        smtp.get("from_addr")
+        or os.environ.get("STOREFRONT_SMTP_FROM_ADDR", "")
+        or os.environ.get("RESEND_FROM", "")
+    ).strip()
+    resend_endpoint = os.environ.get("RESEND_API_BASE", "https://api.resend.com").rstrip("/") + "/emails"
+    if resend_api_key and resend_from_addr:
+        return _SfResendCodeSender(
+            api_key=resend_api_key,
+            from_addr=resend_from_addr,
+            endpoint=resend_endpoint,
+        )
+
+    host = (smtp.get("host") or os.environ.get("STOREFRONT_SMTP_HOST", "")).strip()
     if host:
+        username = (smtp.get("username") or os.environ.get("STOREFRONT_SMTP_USERNAME", "")).strip()
+        password = (
+            smtp.get("password")
+            or os.environ.get("STOREFRONT_SMTP_PASSWORD", "")
+            or os.environ.get("SMTP_PASSWORD", "")
+        )
+        from_addr = (
+            smtp.get("from_addr")
+            or os.environ.get("STOREFRONT_SMTP_FROM_ADDR", "no-reply@example.com")
+        )
         return _SfSmtpCodeSender(
-            host=host, port=int(smtp.get("port", 587)),
-            username=smtp.get("username", ""), password=smtp.get("password", ""),
-            from_addr=smtp.get("from_addr", "no-reply@example.com"),
+            host=host, port=int(smtp.get("port", os.environ.get("STOREFRONT_SMTP_PORT", 587))),
+            username=username, password=password,
+            from_addr=from_addr,
             use_tls=bool(smtp.get("use_tls", True)),
         )
     return _SfFakeCodeSender()
@@ -1348,8 +1398,11 @@ async def store_auth_request(request: Request):
     email = (body.get("email") or "").strip().lower()
     if not re.match(r"^[^@\s]+@[^@\s]+\.[^@\s]+$", email):
         raise HTTPException(status_code=400, detail="Invalid email address.")
-    _sf_request_code(email, now=_dt.datetime.utcnow(),
-                     code_sender=_store_code_sender(), store=_store_auth_store())
+    try:
+        _sf_request_code(email, now=_dt.datetime.utcnow(),
+                         code_sender=_store_code_sender(), store=_store_auth_store())
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail=f"Failed to send email code: {exc}")
     return JSONResponse({"sent": True})
 
 
@@ -1454,15 +1507,47 @@ async def store_checkout(slug: str, request: Request):
     if order["email"] != session["email"]:
         raise HTTPException(status_code=403, detail="This order belongs to another account.")
 
+    base = str(request.base_url).rstrip("/")
     provider = _sf_get_payment_provider(_load_storefront_settings())
     checkout = provider.create_checkout(
-        amount=order["amount_cents"], currency=order["currency"], reference=reference)
-    # Stub provider has no real charge, so the order is settled immediately.
-    _sf_set_order_status(db, reference, "paid", now=_dt.datetime.utcnow())
+        amount=order["amount_cents"], currency=order["currency"], reference=reference,
+        success_url=f"{base}/store/{slug}?paid={reference}",
+        cancel_url=f"{base}/store/{slug}",
+    )
+    if checkout.status == "paid":
+        _sf_set_order_status(db, reference, "paid", now=_dt.datetime.utcnow())
     return JSONResponse({
         "reference": checkout.reference, "amount": checkout.amount,
-        "currency": checkout.currency, "status": "paid", "url": checkout.url,
+        "currency": checkout.currency, "status": checkout.status, "url": checkout.url,
     })
+
+
+
+@app.post("/store/webhook/stripe")
+async def stripe_webhook(request: Request):
+    payload = await request.body()
+    sig_header = request.headers.get("stripe-signature", "")
+    webhook_secret = os.environ.get("STRIPE_WEBHOOK_SECRET", "").strip()
+
+    if webhook_secret:
+        import stripe as _stripe
+        try:
+            event = _stripe.Webhook.construct_event(payload, sig_header, webhook_secret)
+        except Exception:
+            raise HTTPException(status_code=400, detail="Invalid Stripe signature.")
+    else:
+        import json as _json
+        event = _json.loads(payload)
+
+    if event.get("type") == "checkout.session.completed":
+        reference = (event.get("data") or {}).get("object", {}).get("client_reference_id") or ""
+        if reference:
+            db = _store_db()
+            order = _sf_get_order(db, reference)
+            if order:
+                _sf_set_order_status(db, reference, "paid", now=_dt.datetime.utcnow())
+
+    return JSONResponse({"received": True})
 
 
 # ── Admin authentication (email allowlist + one-time code) ───────────────────────
@@ -1494,8 +1579,20 @@ async def admin_auth_request(request: Request):
         raise HTTPException(status_code=400, detail="Invalid email address.")
     if not _sf_is_admin(_store_db(), email):
         raise HTTPException(status_code=403, detail="This email is not an administrator.")
-    _sf_request_code(email, now=_dt.datetime.utcnow(),
-                     code_sender=_store_code_sender(), store=_store_auth_store())
+    sender = _store_code_sender()
+    if isinstance(sender, _SfFakeCodeSender):
+        raise HTTPException(
+            status_code=503,
+            detail=(
+                "Email delivery is not configured. Set storefront.smtp in settings.json "
+                "or STOREFRONT_SMTP_* environment variables."
+            ),
+        )
+    try:
+        _sf_request_code(email, now=_dt.datetime.utcnow(),
+                         code_sender=sender, store=_store_auth_store())
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail=f"Failed to send email code: {exc}")
     return JSONResponse({"sent": True})
 
 

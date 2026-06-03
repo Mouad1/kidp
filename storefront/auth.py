@@ -5,6 +5,9 @@ import json
 import pathlib
 import secrets
 import smtplib
+import ssl
+import urllib.error
+import urllib.request
 from dataclasses import dataclass, asdict
 from email.message import EmailMessage
 from typing import Protocol
@@ -51,6 +54,61 @@ class SmtpCodeSender:
             if self.username:
                 server.login(self.username, self.password)
             server.send_message(msg)
+
+
+class ResendCodeSender:
+    def __init__(self, api_key: str, from_addr: str,
+                 endpoint: str = "https://api.resend.com/emails"):
+        self.api_key = api_key
+        self.from_addr = from_addr
+        self.endpoint = endpoint
+
+    def _ssl_context(self) -> ssl.SSLContext:
+        try:
+            import certifi
+            return ssl.create_default_context(cafile=certifi.where())
+        except ImportError:
+            return ssl.create_default_context()
+
+    def send(self, email: str, code: str) -> None:
+        payload = {
+            "from": self.from_addr,
+            "to": [email],
+            "subject": "Your StoryForge confirmation code",
+            "text": f"Your confirmation code is {code}. It expires in 10 minutes.",
+            "html": f"<p>Your confirmation code is <strong>{code}</strong>. It expires in 10 minutes.</p>",
+        }
+        body = json.dumps(payload).encode("utf-8")
+        req = urllib.request.Request(
+            self.endpoint,
+            data=body,
+            headers={
+                "Authorization": f"Bearer {self.api_key}",
+                "Content-Type": "application/json",
+                "User-Agent": "storyforge-storefront/1.0",
+            },
+            method="POST",
+        )
+        try:
+            with urllib.request.urlopen(req, context=self._ssl_context(), timeout=15) as resp:
+                status = getattr(resp, "status", 200)
+                if status >= 400:
+                    raise RuntimeError(f"Resend request failed with status {status}")
+        except urllib.error.HTTPError as exc:
+            detail = exc.read().decode("utf-8", errors="replace")
+            hint = ""
+            if exc.code == 401:
+                hint = " — invalid Resend API key"
+            elif exc.code == 403:
+                hint = (
+                    " — with onboarding@resend.dev you can only send to your own account email. "
+                    "Verify a domain at resend.com/domains and update STOREFRONT_SMTP_FROM_ADDR."
+                )
+            elif exc.code == 422:
+                hint = " — sender domain not verified in Resend, or invalid 'from' address"
+            raise RuntimeError(f"Resend API error {exc.code}: {detail}{hint}") from exc
+        except urllib.error.URLError as exc:
+            raise RuntimeError(f"Resend network error: {exc.reason}") from exc
 
 
 @dataclass

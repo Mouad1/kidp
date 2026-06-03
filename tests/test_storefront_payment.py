@@ -1,11 +1,11 @@
 from storefront.payment import StubPaymentProvider, CheckoutSession, get_payment_provider
 
 
-def test_stub_provider_creates_pending_session():
+def test_stub_provider_settles_immediately():
     p = StubPaymentProvider()
     s = p.create_checkout(amount=530, currency="USD", reference="order-1")
     assert isinstance(s, CheckoutSession)
-    assert s.status == "pending"
+    assert s.status == "paid"
     assert s.amount == 530
     assert s.reference == "order-1"
     assert s.url.endswith("order-1")

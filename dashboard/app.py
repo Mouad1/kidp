@@ -1692,13 +1692,62 @@ async def admin_auth_verify(request: Request):
     return resp
 
 
+_ORDERS_PAGE_SIZE = 20
+
+
 @app.get("/admin/orders", response_class=HTMLResponse)
-def admin_orders(request: Request):
+def admin_orders(request: Request, q: str = "", status: str = "", page: int = 1):
     if _require_admin(request) is None:
         return RedirectResponse(url="/admin/login", status_code=303)
-    orders = _sf_list_orders(_store_db(), limit=200)
+
+    all_orders = _sf_list_orders(_store_db(), limit=10000)
+
+    # Enrich with human-readable book title
+    title_cache: dict[str, str] = {}
+    for o in all_orders:
+        slug = o["slug"]
+        if slug not in title_cache:
+            try:
+                cfg = _store_read_config(slug)
+                title_cache[slug] = cfg.get("title") or slug
+            except Exception:
+                title_cache[slug] = slug
+        o["book_title"] = title_cache[slug]
+
+    # Filter: text search on email, child_name, slug, reference
+    if q:
+        q_low = q.strip().lower()
+        all_orders = [
+            o for o in all_orders
+            if q_low in o["email"].lower()
+            or q_low in o["child_name"].lower()
+            or q_low in o["slug"].lower()
+            or q_low in o["reference"].lower()
+        ]
+
+    # Filter: status
+    valid_statuses = ("pending", "paid", "failed")
+    if status in valid_statuses:
+        all_orders = [o for o in all_orders if o["status"] == status]
+
+    # Pagination
+    total = len(all_orders)
+    page = max(1, page)
+    total_pages = max(1, (total + _ORDERS_PAGE_SIZE - 1) // _ORDERS_PAGE_SIZE)
+    page = min(page, total_pages)
+    start = (page - 1) * _ORDERS_PAGE_SIZE
+    orders = all_orders[start: start + _ORDERS_PAGE_SIZE]
+
     return templates.TemplateResponse(
-        request=request, name="admin_orders.html", context={"orders": orders},
+        request=request, name="admin_orders.html",
+        context={
+            "orders": orders,
+            "q": q,
+            "status_filter": status,
+            "page": page,
+            "total_pages": total_pages,
+            "total": total,
+        },
     )
 
 

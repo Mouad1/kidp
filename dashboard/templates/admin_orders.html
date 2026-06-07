@@ -14,6 +14,7 @@
       <div class="flex items-center gap-3">
         <span class="text-2xl">📦</span>
         <h1 class="text-lg font-bold">Orders</h1>
+        <span class="text-sm text-gray-400">({{ total }})</span>
       </div>
       <div class="flex items-center gap-4 text-sm">
         <a href="/admin/stories" class="text-indigo-600 hover:text-indigo-800">📖 Stories</a>
@@ -23,12 +24,36 @@
   </header>
 
   <main class="max-w-5xl mx-auto px-6 py-8">
+
+    <!-- Search + filter bar -->
+    <form method="get" action="/admin/orders" class="flex flex-wrap gap-3 mb-5">
+      <input type="text" name="q" value="{{ q }}" placeholder="Search email, child, book, reference..."
+             class="flex-1 min-w-48 border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400" />
+      <button type="submit"
+              class="bg-indigo-600 text-white text-sm px-4 py-2 rounded-lg hover:bg-indigo-700">Search</button>
+      {% if q or status_filter %}
+      <a href="/admin/orders" class="text-sm text-gray-500 hover:text-gray-700 self-center px-2">Clear</a>
+      {% endif %}
+    </form>
+
+    <!-- Status filter tabs -->
+    <div class="flex gap-1 mb-5 text-sm">
+      {% for label, val in [("All", ""), ("Paid", "paid"), ("Pending", "pending"), ("Failed", "failed")] %}
+      <a href="/admin/orders?q={{ q }}&status={{ val }}"
+         class="px-3 py-1.5 rounded-lg font-medium transition
+           {% if status_filter == val %}bg-indigo-600 text-white{% else %}bg-white border border-gray-200 text-gray-600 hover:bg-gray-50{% endif %}">
+        {{ label }}
+      </a>
+      {% endfor %}
+    </div>
+
     {% if not orders %}
     <div class="bg-white border border-dashed border-gray-300 rounded-xl p-12 text-center text-gray-500">
-      No orders yet.
+      No orders found{% if q or status_filter %} matching the current filter{% endif %}.
     </div>
     {% else %}
-    <table class="w-full bg-white rounded-xl border border-gray-200 overflow-hidden text-sm">
+    <div class="overflow-x-auto rounded-xl border border-gray-200">
+    <table class="w-full bg-white text-sm">
       <thead class="bg-gray-50 text-gray-500 text-left">
         <tr>
           <th class="px-4 py-3">Photo</th>
@@ -43,15 +68,18 @@
       </thead>
       <tbody>
         {% for o in orders %}
-        <tr class="border-t border-gray-100">
+        <tr class="border-t border-gray-100 hover:bg-gray-50">
           <td class="px-4 py-3">
             <img src="/admin/orders/{{ o.reference }}/photo"
                  class="w-12 h-12 object-cover rounded-lg border border-gray-200" alt="photo" />
           </td>
           <td class="px-4 py-3 font-medium">{{ o.child_name }}</td>
-          <td class="px-4 py-3">{{ o.slug }}</td>
+          <td class="px-4 py-3">
+            <span class="font-medium">{{ o.book_title }}</span>
+            <p class="text-xs text-gray-400 font-mono">{{ o.slug }}</p>
+          </td>
           <td class="px-4 py-3">{{ o.page_count }}</td>
-          <td class="px-4 py-3">{{ "%.2f"|format(o.amount_cents / 100) }} {{ o.currency }}</td>
+          <td class="px-4 py-3">${{ "%.2f"|format(o.amount_cents / 100) }} {{ o.currency }}</td>
           <td class="px-4 py-3">
             <span class="px-2 py-1 rounded-full text-xs font-semibold
               {% if o.status == 'paid' %}bg-emerald-100 text-emerald-700
@@ -59,11 +87,30 @@
               {% else %}bg-amber-100 text-amber-700{% endif %}">{{ o.status }}</span>
           </td>
           <td class="px-4 py-3 text-gray-500">{{ o.email }}</td>
-          <td class="px-4 py-3 text-gray-400">{{ o.created_at[:16] }}</td>
+          <td class="px-4 py-3 text-gray-400 whitespace-nowrap">{{ o.created_at[:16] }}</td>
         </tr>
         {% endfor %}
       </tbody>
     </table>
+    </div>
+
+    <!-- Pagination -->
+    {% if total_pages > 1 %}
+    <div class="flex items-center justify-between mt-5 text-sm">
+      <span class="text-gray-500">Page {{ page }} of {{ total_pages }}</span>
+      <div class="flex gap-2">
+        {% if page > 1 %}
+        <a href="/admin/orders?q={{ q }}&status={{ status_filter }}&page={{ page - 1 }}"
+           class="px-3 py-1.5 border border-gray-200 rounded-lg hover:bg-gray-50">← Prev</a>
+        {% endif %}
+        {% if page < total_pages %}
+        <a href="/admin/orders?q={{ q }}&status={{ status_filter }}&page={{ page + 1 }}"
+           class="px-3 py-1.5 border border-gray-200 rounded-lg hover:bg-gray-50">Next →</a>
+        {% endif %}
+      </div>
+    </div>
+    {% endif %}
+
     {% endif %}
   </main>
 </body>

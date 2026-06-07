@@ -70,12 +70,16 @@ def test_catalog_lists_only_published(store_env):
     assert r.status_code == 200
     assert "Alpha" in r.text
     assert "Beta" not in r.text
+    # Price is shown on the catalog grid (4 pages: 1.0 + 4*0.07*1.0 = 1.28 * 2.5 = 3.20)
+    assert "$3.20" in r.text
 
 
 def test_personalize_published_ok(store_env):
     r = client.get("/store/alpha")
     assert r.status_code == 200
     assert "Alpha" in r.text
+    # Price is shown on the product page
+    assert "$3.20" in r.text
 
 
 def test_personalize_unpublished_404(store_env):

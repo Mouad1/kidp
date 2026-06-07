@@ -1035,6 +1035,24 @@ def _load_pricing_settings() -> dict:
     return default_pricing_settings()
 
 
+_CURRENCY_SYMBOLS = {"USD": "$", "EUR": "€", "GBP": "£"}
+
+
+def _store_price_quote(page_count: int) -> dict:
+    """Storefront retail quote for a book (color, standard paper, with cover).
+
+    Single source of truth for the price shown on the catalog, product page,
+    and used when creating the order, so they can never drift apart.
+    """
+    from pipeline.pricing import compute_price
+    quote = compute_price(page_count, color=True, paper_quality="standard",
+                          has_cover=True, settings=_load_pricing_settings())
+    currency = quote["currency"]
+    symbol = _CURRENCY_SYMBOLS.get(currency, "")
+    display = f"{symbol}{quote['price']:.2f}" if symbol else f"{quote['price']:.2f} {currency}"
+    return {"price": quote["price"], "currency": currency, "display": display}
+
+
 
 def _normalize_photo_to_png(data: bytes) -> bytes:
     """Decode an uploaded image and re-encode as PNG bytes for consistent Gemini refs."""
@@ -1345,9 +1363,19 @@ def _require_session(request: Request) -> dict | None:
 @app.get("/store", response_class=HTMLResponse)
 def store_catalog(request: Request):
     entries = _sf_list_catalog(_store_catalog_names(), _store_read_config)
+    view = []
+    for e in entries:
+        quote = _store_price_quote(e.page_count)
+        view.append({
+            "slug": e.slug,
+            "title": e.title,
+            "page_count": e.page_count,
+            "category": e.category,
+            "price_display": quote["display"],
+        })
     return templates.TemplateResponse(
         request=request, name="store_catalog.html",
-        context={"entries": entries},
+        context={"entries": view},
     )
 
 
@@ -1391,10 +1419,13 @@ def store_personalize(slug: str, request: Request):
         raise HTTPException(status_code=404, detail="Book not found.")
     if not cfg.get("published"):
         raise HTTPException(status_code=404, detail="Book not found.")
+    page_count = len(cfg.get("pages", []))
+    quote = _store_price_quote(page_count)
     return templates.TemplateResponse(
         request=request, name="store_personalize.html",
         context={"slug": slug, "title": cfg.get("title", slug),
-                 "page_count": len(cfg.get("pages", []))},
+                 "page_count": page_count,
+                 "price_display": quote["display"]},
     )
 
 
@@ -1424,10 +1455,8 @@ async def store_create_order(slug: str, request: Request,
         raise HTTPException(status_code=400, detail="Photo too large (max 12 MB).")
     png_data = _normalize_photo_to_png(data)
 
-    from pipeline.pricing import compute_price
     page_count = len(cfg.get("pages", []))
-    quote = compute_price(page_count, color=True, paper_quality="standard",
-                          has_cover=True, settings=_load_pricing_settings())
+    quote = _store_price_quote(page_count)
     amount_cents = int(round(quote["price"] * 100))
 
     db = _store_db()

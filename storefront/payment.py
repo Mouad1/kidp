@@ -24,7 +24,7 @@ class StubPaymentProvider:
                         success_url: str = "", cancel_url: str = "") -> CheckoutSession:
         return CheckoutSession(
             reference=reference, amount=amount, currency=currency,
-            status="paid", url=f"/store/checkout/mock/{reference}",
+            status="paid", url=success_url or f"/store/success?reference={reference}",
         )
 
 

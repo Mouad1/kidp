@@ -1574,7 +1574,7 @@ async def store_checkout(slug: str, request: Request):
     provider = _sf_get_payment_provider(_load_storefront_settings())
     checkout = provider.create_checkout(
         amount=order["amount_cents"], currency=order["currency"], reference=reference,
-        success_url=f"{base}/store/{slug}?paid={reference}",
+        success_url=f"{base}/store/success?reference={reference}",
         cancel_url=f"{base}/store/{slug}",
     )
     if checkout.status == "paid":
@@ -1584,6 +1584,21 @@ async def store_checkout(slug: str, request: Request):
         "currency": checkout.currency, "status": checkout.status, "url": checkout.url,
     })
 
+
+@app.get("/store/success", response_class=HTMLResponse)
+def store_success(request: Request, reference: str = ""):
+    """Post-payment success page. Validates order status from DB and shows confirmation."""
+    order: dict | None = None
+    if reference:
+        try:
+            db = _store_db()
+            order = _sf_get_order(db, reference)
+        except Exception:
+            pass
+    return templates.TemplateResponse(
+        request=request, name="store_success.html",
+        context={"order": order},
+    )
 
 
 @app.post("/store/webhook/stripe")

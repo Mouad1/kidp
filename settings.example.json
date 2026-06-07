@@ -19,7 +19,7 @@
         "markup_multiplier": 2.5
     },
     "storefront": {
-        "session_secret": "CHANGE_ME_TO_A_LONG_RANDOM_STRING",
+        "session_secret": "",
         "https": false,
         "admin": {
             "enabled": false,

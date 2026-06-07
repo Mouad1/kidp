@@ -868,47 +868,6 @@ async def new_book_page(request: Request):
     return templates.TemplateResponse(request=request, name="new_book.html", context={})
 
 
-@app.get("/niche", response_class=HTMLResponse)
-async def niche_research_page(request: Request):
-    """Render the Niche Research page. Matches Module A Steps 1-2."""
-    return templates.TemplateResponse(request=request, name="niche.html", context={})
-
-
-@app.post("/api/niche-research")
-async def api_niche_research(niche: str = Form(...), csv_file: UploadFile = File(...)):
-    """Module A: Brainstorming Engine. Process BookBolt CSV and ask Gemini for sub-niches."""
-    if not os.environ.get("GEMINI_API_KEY"):
-        raise HTTPException(status_code=500, detail="GEMINI_API_KEY non configuré sur le serveur.")
-
-    tmp_path = ROOT / f"tmp_{csv_file.filename}"
-    try:
-        content = await csv_file.read()
-        tmp_path.write_bytes(content)
-
-        process = await asyncio.create_subprocess_exec(
-            sys.executable, str(ROOT / "pipeline" / "niche_research.py"),
-            "--csv", str(tmp_path),
-            "--niche", niche,
-            stdout=asyncio.subprocess.PIPE,
-            stderr=asyncio.subprocess.PIPE,
-            env=os.environ.copy()
-        )
-        stdout, stderr = await process.communicate()
-        
-        if process.returncode != 0:
-            raise HTTPException(status_code=500, detail=f"Script failed: {stderr.decode()}")
-            
-        import json
-        out_text = stdout.decode().strip()
-        try:
-            return json.loads(out_text)
-        except json.JSONDecodeError:
-            raise HTTPException(status_code=500, detail=f"Invalid JSON from Gemini: {out_text}")
-    finally:
-        if tmp_path.exists():
-            tmp_path.unlink()
-
-
 # ── Entry point ────────────────────────────────────────────────────────────────
 
 class TranslateRequest(BaseModel):
@@ -1649,6 +1608,30 @@ def storyforge_publish(name: str, published: bool = True):
     cfg["published"] = published
     write_config(name, cfg)
     return {"name": name, "published": published}
+
+
+@app.get("/admin/stories", response_class=HTMLResponse)
+def admin_stories(request: Request):
+    if _require_admin(request) is None:
+        return RedirectResponse(url="/admin/login", status_code=303)
+    all_orders = _sf_list_orders(_store_db(), limit=10000)
+    order_counts: dict[str, int] = {}
+    for o in all_orders:
+        order_counts[o["slug"]] = order_counts.get(o["slug"], 0) + 1
+    entries = []
+    for name in _list_books():
+        status = _book_status(name)
+        entries.append({
+            "slug":        name,
+            "title":       status.get("title", name),
+            "category":    status.get("category", ""),
+            "page_count":  status.get("in_sequence", 0),
+            "order_count": order_counts.get(name, 0),
+            "published":   status.get("published", False),
+        })
+    return templates.TemplateResponse(
+        request=request, name="admin_stories.html", context={"entries": entries},
+    )
 
 
 if __name__ == "__main__":

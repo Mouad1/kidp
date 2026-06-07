@@ -1,0 +1,27 @@
+{
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "Write|Edit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "f=$(jq -r '.tool_input.file_path // empty'); echo \"$f\" | grep -qE '^(pipeline|dashboard)/' && echo '{\"hookSpecificOutput\": {\"hookEventName\": \"PostToolUse\", \"additionalContext\": \"Pipeline/dashboard file changed. If behavior changed, update BOOK_PROCESS.md and BACKLOG.md.\"}}' || true",
+            "statusMessage": "Checking docs sync..."
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "echo '{\"systemMessage\": \"Docs check: update BACKLOG.md + tasks/lessons.md if project state changed.\"}'",
+            "statusMessage": "Checking doc state..."
+          }
+        ]
+      }
+    ]
+  }
+}

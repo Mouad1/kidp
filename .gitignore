@@ -19,6 +19,7 @@ __pycache__/
 
 # Secrets & runtime config
 .env.local
+.env.prod
 settings.json
 
 # Storefront runtime auth store (one-time codes)

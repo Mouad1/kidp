@@ -152,6 +152,58 @@ def test_admin_orders_lists_paid(store_env, monkeypatch):
     assert "Lina" in r.text
 
 
+def test_admin_auth_request_returns_503_without_smtp(store_env, monkeypatch):
+    monkeypatch.setattr(appmod, "_sf_is_admin", lambda db, email: True)
+
+    r = client.post("/admin/auth/request", json={"email": "admin@example.com"})
+
+    assert r.status_code == 503
+    assert "Email delivery is not configured" in r.json()["detail"]
+
+
+def test_admin_auth_request_succeeds_with_smtp_sender(store_env, monkeypatch):
+    monkeypatch.setattr(appmod, "_sf_is_admin", lambda db, email: True)
+
+    class _Sender:
+        def __init__(self):
+            self.sent = []
+
+        def send(self, email, code):
+            self.sent.append((email, code))
+
+    smtp_like_sender = _Sender()
+    monkeypatch.setattr(appmod, "_store_code_sender", lambda: smtp_like_sender)
+
+    r = client.post("/admin/auth/request", json={"email": "admin@example.com"})
+
+    assert r.status_code == 200
+    assert r.json()["sent"] is True
+    assert smtp_like_sender.sent
+
+
+def test_store_auth_request_returns_502_when_sender_fails(store_env, monkeypatch):
+    class _FailingSender:
+        def send(self, email, code):
+            raise RuntimeError("boom")
+
+    monkeypatch.setattr(appmod, "_store_code_sender", lambda: _FailingSender())
+    r = client.post("/store/auth/request", json={"email": "user@example.com"})
+    assert r.status_code == 502
+    assert "Failed to send email code" in r.json()["detail"]
+
+
+def test_admin_auth_request_returns_502_when_sender_fails(store_env, monkeypatch):
+    class _FailingSender:
+        def send(self, email, code):
+            raise RuntimeError("boom")
+
+    monkeypatch.setattr(appmod, "_sf_is_admin", lambda db, email: True)
+    monkeypatch.setattr(appmod, "_store_code_sender", lambda: _FailingSender())
+    r = client.post("/admin/auth/request", json={"email": "admin@example.com"})
+    assert r.status_code == 502
+    assert "Failed to send email code" in r.json()["detail"]
+
+
 def test_publish_toggle(monkeypatch):
     saved = {}
     monkeypatch.setattr(appmod, "read_config", lambda name: {"title": "X", "pages": []})

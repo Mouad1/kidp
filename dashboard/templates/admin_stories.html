@@ -1,0 +1,117 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Stories · Admin</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+</head>
+
+<body class="bg-gray-50 text-gray-900 min-h-screen">
+  <header class="bg-white border-b border-gray-200 px-6 py-4">
+    <div class="max-w-5xl mx-auto flex items-center justify-between">
+      <div class="flex items-center gap-3">
+        <span class="text-2xl">📖</span>
+        <h1 class="text-lg font-bold">Stories</h1>
+      </div>
+      <div class="flex items-center gap-4 text-sm">
+        <a href="/admin/orders" class="text-indigo-600 hover:text-indigo-800">← Orders</a>
+        <a href="/" class="text-indigo-600 hover:text-indigo-800">← Dashboard</a>
+      </div>
+    </div>
+  </header>
+
+  <main class="max-w-5xl mx-auto px-6 py-8">
+    {% if not entries %}
+    <div class="bg-white border border-dashed border-gray-300 rounded-xl p-12 text-center text-gray-500">
+      Aucune story trouvée.
+    </div>
+    {% else %}
+    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+      {% for e in entries %}
+      <div
+        class="bg-white rounded-xl border-2 p-5 flex flex-col gap-3 {% if e.published %}border-emerald-300{% else %}border-gray-200{% endif %}"
+        data-slug="{{ e.slug }}"
+        data-published="{{ 'true' if e.published else 'false' }}"
+      >
+        <div class="flex items-start justify-between gap-2">
+          <h2 class="font-bold text-base leading-tight">{{ e.title }}</h2>
+          <span class="shrink-0 px-2 py-0.5 rounded-full text-xs font-semibold
+            {% if e.published %}bg-emerald-100 text-emerald-700{% else %}bg-gray-100 text-gray-500{% endif %}">
+            {% if e.published %}Publié{% else %}Masqué{% endif %}
+          </span>
+        </div>
+
+        <div class="flex flex-wrap gap-1.5 text-xs">
+          <span class="bg-gray-100 text-gray-600 px-2 py-0.5 rounded-full">{{ e.category }}</span>
+          <span class="bg-gray-100 text-gray-600 px-2 py-0.5 rounded-full">{{ e.page_count }} pages</span>
+        </div>
+
+        <div class="text-xs text-gray-500">
+          📦 <strong>{{ e.order_count }}</strong> commande{{ 's' if e.order_count != 1 else '' }}
+        </div>
+
+        <div class="text-xs text-gray-400 font-mono">{{ e.slug }}</div>
+
+        <div class="mt-auto pt-2">
+          <button
+            onclick="togglePublish(this)"
+            class="w-full py-1.5 rounded-lg text-sm font-medium transition-colors
+              {% if e.published %}bg-red-50 text-red-700 hover:bg-red-100{% else %}bg-emerald-600 text-white hover:bg-emerald-700{% endif %}"
+          >
+            {% if e.published %}Dépublier{% else %}Publier{% endif %}
+          </button>
+          <p class="text-red-600 text-xs mt-1 hidden" data-error></p>
+        </div>
+      </div>
+      {% endfor %}
+    </div>
+    {% endif %}
+  </main>
+
+  <script>
+    async function togglePublish(btn) {
+      const card = btn.closest("[data-slug]");
+      const slug = card.dataset.slug;
+      const currently = card.dataset.published === "true";
+      const next = !currently;
+      const errEl = card.querySelector("[data-error]");
+
+      btn.disabled = true;
+      const origText = btn.textContent.trim();
+      btn.textContent = "...";
+      errEl.classList.add("hidden");
+
+      try {
+        const r = await fetch(`/api/storyforge/${slug}/publish?published=${next}`, { method: "POST" });
+        if (!r.ok) throw new Error((await r.json().catch(() => ({}))).detail || "Erreur serveur");
+
+        // Update card state inline
+        card.dataset.published = String(next);
+        const badge = card.querySelector("span[class*='rounded-full']");
+
+        if (next) {
+          card.classList.replace("border-gray-200", "border-emerald-300");
+          badge.className = badge.className.replace("bg-gray-100 text-gray-500", "bg-emerald-100 text-emerald-700");
+          badge.textContent = "Publié";
+          btn.className = btn.className.replace("bg-emerald-600 text-white hover:bg-emerald-700", "bg-red-50 text-red-700 hover:bg-red-100");
+          btn.textContent = "Dépublier";
+        } else {
+          card.classList.replace("border-emerald-300", "border-gray-200");
+          badge.className = badge.className.replace("bg-emerald-100 text-emerald-700", "bg-gray-100 text-gray-500");
+          badge.textContent = "Masqué";
+          btn.className = btn.className.replace("bg-red-50 text-red-700 hover:bg-red-100", "bg-emerald-600 text-white hover:bg-emerald-700");
+          btn.textContent = "Publier";
+        }
+      } catch (err) {
+        errEl.textContent = err.message;
+        errEl.classList.remove("hidden");
+        btn.textContent = origText;
+      } finally {
+        btn.disabled = false;
+      }
+    }
+  </script>
+</body>
+</html>

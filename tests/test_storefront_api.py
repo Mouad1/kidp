@@ -217,3 +217,83 @@ def test_publish_toggle(monkeypatch):
     assert r.json()["published"] is True
     assert saved["published"] is True
 
+
+# ── Face-swap preview endpoint tests ─────────────────────────────────────────
+
+from storyforge.imagegen import FakeImageGenerator
+from storyforge.types import Template, PageBeat
+
+
+def _fake_template() -> Template:
+    return Template(
+        name="alpha",
+        slug="alpha",
+        mode="color",
+        language_default="fr",
+        art_style="watercolor",
+        variables=[],
+        pages=[
+            PageBeat(beat="intro", text="Hello {HERO_NAME}!", image_prompt="A hero in {HERO}"),
+        ],
+    )
+
+
+@pytest.fixture
+def preview_env(store_env, monkeypatch):
+    """Extend store_env with fake storyforge dependencies for preview endpoint."""
+    fake_gen = FakeImageGenerator()
+    monkeypatch.setattr(appmod, "_backend_provider", lambda: fake_gen)
+    monkeypatch.setattr(appmod, "_analyze_provider", lambda photos: "curly hair, big eyes")
+    monkeypatch.setattr(appmod, "_sf_load_template", lambda slug: _fake_template())
+    return {"gen": fake_gen}
+
+
+def test_preview_returns_cover_and_page1(preview_env):
+    r = client.post(
+        "/store/alpha/preview",
+        data={"child_name": "Lina"},
+        files={"photo": ("p.png", _png_bytes(), "image/png")},
+    )
+    assert r.status_code == 200
+    data = r.json()
+    assert data["cover"].startswith("data:image/png;base64,")
+    assert data["page1"].startswith("data:image/png;base64,")
+    assert data["page_count"] == 1  # template has 1 page
+
+
+def test_preview_exactly_3_image_calls(preview_env):
+    """Strict cap: portrait + page1 + cover = 3 Gemini image calls."""
+    client.post(
+        "/store/alpha/preview",
+        data={"child_name": "Lina"},
+        files={"photo": ("p.png", _png_bytes(), "image/png")},
+    )
+    assert len(preview_env["gen"].calls) == 3
+
+
+def test_preview_requires_child_name(preview_env):
+    r = client.post(
+        "/store/alpha/preview",
+        data={"child_name": "   "},
+        files={"photo": ("p.png", _png_bytes(), "image/png")},
+    )
+    assert r.status_code == 400
+
+
+def test_preview_requires_photo(preview_env):
+    r = client.post(
+        "/store/alpha/preview",
+        data={"child_name": "Lina"},
+        files={"photo": ("p.png", b"", "image/png")},
+    )
+    assert r.status_code == 400
+
+
+def test_preview_unpublished_404(preview_env):
+    r = client.post(
+        "/store/beta/preview",
+        data={"child_name": "Lina"},
+        files={"photo": ("p.png", _png_bytes(), "image/png")},
+    )
+    assert r.status_code == 404
+

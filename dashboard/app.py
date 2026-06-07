@@ -1409,6 +1409,81 @@ async def store_auth_verify(request: Request):
     return resp
 
 
+@app.post("/store/{slug}/preview")
+async def store_preview(slug: str,
+                        child_name: str = Form(...),
+                        photo: UploadFile = File(...),
+                        photo2: UploadFile | None = File(default=None)):
+    """Free-trial face-swap preview: generates ONLY the cover + page 1.
+
+    No order is created. Photos are never persisted. The response contains
+    cover and page-1 PNGs as base64 data-URIs for immediate display.
+    Strictly 3 Gemini image calls: 1 portrait + 1 cover + 1 page-1.
+    """
+    if not re.match(r'^[a-z0-9][a-z0-9-]*[a-z0-9]$', slug):
+        raise HTTPException(status_code=400, detail="Invalid book name")
+    child = (child_name or "").strip()
+    if not child:
+        raise HTTPException(status_code=400, detail="Child name is required.")
+    try:
+        cfg = _store_read_config(slug)
+    except FileNotFoundError:
+        raise HTTPException(status_code=404, detail="Book not found.")
+    if not cfg.get("published"):
+        raise HTTPException(status_code=404, detail="Book not found.")
+
+    photos: list[bytes] = []
+    raw = await photo.read()
+    if not raw:
+        raise HTTPException(status_code=400, detail="Empty photo.")
+    if len(raw) > 12 * 1024 * 1024:
+        raise HTTPException(status_code=400, detail="Photo too large (max 12 MB).")
+    photos.append(_normalize_photo_to_png(raw))
+    if photo2 is not None:
+        raw2 = await photo2.read()
+        if raw2:
+            if len(raw2) > 12 * 1024 * 1024:
+                raise HTTPException(status_code=400, detail="Photo 2 too large (max 12 MB).")
+            photos.append(_normalize_photo_to_png(raw2))
+
+    tpl = _sf_load_template(slug)
+
+    import asyncio
+    import base64
+
+    def _run_preview() -> dict:
+        gen = _backend_provider()
+        # 1 image call: build hero portrait from customer photos
+        sheet = _sf_build_hero(photos, tpl.art_style, gen, _analyze_provider)
+        # Resolve template page specs with child name substituted
+        variables: dict[str, str] = {k: child for k in ("HERO_NAME", "NAME", "CHILD_NAME")}
+        safe_vars = {k: v for k, v in variables.items() if k != "HERO_NAME"}
+        specs = _sf_resolve(tpl, safe_vars, sheet)
+        # 1 image call: page 1 only
+        page1_png: bytes | None = _sf_generate_page(specs[0], sheet, gen) if specs else None
+        # 1 image call: cover
+        cover_png = _sf_generate_cover(child, sheet, gen)
+
+        def b64(data: bytes) -> str:
+            return "data:image/png;base64," + base64.b64encode(data).decode()
+
+        return {
+            "cover": b64(cover_png),
+            "page1": b64(page1_png) if page1_png else None,
+            "page_count": len(tpl.pages),
+        }
+
+    loop = asyncio.get_event_loop()
+    try:
+        result = await loop.run_in_executor(None, _run_preview)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail=f"Preview generation failed: {exc}")
+
+    return JSONResponse(result)
+
+
 @app.get("/store/{slug}", response_class=HTMLResponse)
 def store_personalize(slug: str, request: Request):
     if not re.match(r'^[a-z0-9][a-z0-9-]*[a-z0-9]$', slug):

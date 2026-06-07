@@ -40,6 +40,9 @@
              class="w-full border border-gray-300 rounded-lg px-3 py-2 mb-4" />
       <label class="block text-sm font-medium mb-1">Photo</label>
       <input id="child-photo" type="file" accept="image/*"
+             class="w-full text-sm mb-2" />
+      <label class="block text-sm font-medium mb-1 mt-2 text-gray-500">Second photo <span class="font-normal">(optional, improves accuracy)</span></label>
+      <input id="child-photo2" type="file" accept="image/*"
              class="w-full text-sm mb-4" />
       <button id="to-preview"
               class="bg-purple-600 text-white font-medium px-5 py-2 rounded-lg hover:bg-purple-700 disabled:opacity-50">
@@ -48,13 +51,44 @@
       <div id="details-error" class="hidden mt-2 text-sm text-red-600"></div>
     </section>
 
-    <!-- Step 2: preview -->
+    <!-- Step 2: face-swap preview -->
     <section id="step-preview" class="hidden bg-white rounded-xl border border-gray-200 p-6 mb-6">
-      <h3 class="font-bold mb-4">2. Preview</h3>
-      <div id="preview-status" class="text-sm text-gray-500 mb-4">Preparing your preview...</div>
-      <img id="preview-cover" alt="Cover preview"
-           class="hidden w-48 rounded-lg border border-gray-200 mb-4" />
-      <div id="preview-pages" class="text-sm text-gray-700"></div>
+      <h3 class="font-bold mb-4">2. Your child in the story</h3>
+      <!-- Skeleton loader (shown while generating) -->
+      <div id="preview-skeleton" class="space-y-3">
+        <div class="animate-pulse">
+          <div class="h-3 w-40 bg-gray-200 rounded mb-4"></div>
+          <div class="flex gap-4">
+            <div class="w-44 h-64 bg-gray-200 rounded-xl"></div>
+            <div class="w-44 h-64 bg-gray-200 rounded-xl"></div>
+          </div>
+        </div>
+        <p id="preview-status" class="text-xs text-gray-400">Personalizing your story, this takes about 30s...</p>
+      </div>
+      <!-- Result (revealed after generation) -->
+      <div id="preview-result" class="hidden">
+        <p class="text-sm text-gray-600 mb-4">Here's a sneak peek — cover and first page starred by <strong id="preview-child-name"></strong>:</p>
+        <div class="flex flex-wrap gap-4">
+          <div>
+            <p class="text-xs text-gray-400 mb-1 font-medium uppercase tracking-wide">Cover</p>
+            <img id="preview-cover" alt="Personalized cover"
+                 class="w-44 rounded-xl border border-gray-200 shadow-sm" />
+          </div>
+          <div>
+            <p class="text-xs text-gray-400 mb-1 font-medium uppercase tracking-wide">Page 1</p>
+            <img id="preview-page1" alt="Page 1 preview"
+                 class="w-44 rounded-xl border border-gray-200 shadow-sm" />
+          </div>
+          <div class="flex-1 min-w-[180px]">
+            <p class="text-xs text-gray-400 mb-1 font-medium uppercase tracking-wide">Rest of the book</p>
+            <div class="w-44 h-64 bg-gray-100 rounded-xl border border-dashed border-gray-300 flex flex-col items-center justify-center text-center px-4">
+              <span class="text-2xl mb-2">📖</span>
+              <p class="text-xs text-gray-500">{{ page_count }} pages of adventure await after purchase.</p>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div id="preview-error" class="hidden mt-3 text-sm text-red-600"></div>
     </section>
 
     <!-- Step 3: checkout -->
@@ -99,18 +133,56 @@
       el.classList.toggle('hidden', !msg);
     }
 
-    $('to-preview').addEventListener('click', () => {
+    $('to-preview').addEventListener('click', async () => {
       if (!$('child-name').value.trim()) { inlineError('details-error', 'Please enter your child\u2019s name.'); return; }
       if (!$('child-photo').files.length) { inlineError('details-error', 'Please add a photo.'); return; }
       inlineError('details-error', null);
+
+      // Show Step 2 with skeleton
       $('step-preview').classList.remove('hidden');
-      $('step-checkout').classList.remove('hidden');
-      $('preview-status').textContent =
-        'Your book stars ' + $('child-name').value.trim() + '. Sign in to place your order.';
-      const img = $('preview-cover');
-      img.src = '/api/storyforge/' + slug + '/cover?t=' + Date.now();
-      img.onload = () => img.classList.remove('hidden');
-      $('step-checkout').scrollIntoView({ behavior: 'smooth' });
+      $('preview-skeleton').classList.remove('hidden');
+      $('preview-result').classList.add('hidden');
+      inlineError('preview-error', null);
+      $('step-preview').scrollIntoView({ behavior: 'smooth' });
+
+      // Disable the button while generating
+      const btn = $('to-preview');
+      btn.disabled = true;
+      btn.textContent = 'Generating...';
+
+      try {
+        const fd = new FormData();
+        fd.append('child_name', $('child-name').value.trim());
+        fd.append('photo', $('child-photo').files[0]);
+        const f2 = $('child-photo2').files[0];
+        if (f2) fd.append('photo2', f2);
+
+        const r = await fetch('/store/' + slug + '/preview', { method: 'POST', body: fd });
+        if (!r.ok) {
+          const err = await r.json().catch(() => ({}));
+          inlineError('preview-error', err.detail || 'Preview failed. Please try again.');
+          $('preview-skeleton').classList.add('hidden');
+          return;
+        }
+        const data = await r.json();
+
+        // Reveal personalized images
+        $('preview-cover').src = data.cover;
+        if (data.page1) $('preview-page1').src = data.page1;
+        else $('preview-page1').closest('div').classList.add('hidden');
+        $('preview-child-name').textContent = $('child-name').value.trim();
+
+        $('preview-skeleton').classList.add('hidden');
+        $('preview-result').classList.remove('hidden');
+        $('step-checkout').classList.remove('hidden');
+        $('step-checkout').scrollIntoView({ behavior: 'smooth' });
+      } catch (e) {
+        inlineError('preview-error', 'Network error. Please try again.');
+        $('preview-skeleton').classList.add('hidden');
+      } finally {
+        btn.disabled = false;
+        btn.textContent = 'Preview my book';
+      }
     });
 
     $('send-code').addEventListener('click', async () => {

@@ -15,6 +15,7 @@
         <span class="text-2xl">📦</span>
         <h1 class="text-lg font-bold">Orders</h1>
         <span class="text-sm text-gray-400">({{ total }})</span>
+        <span id="pending-badge" class="hidden ml-1 bg-amber-500 text-white text-xs font-bold px-2 py-0.5 rounded-full"></span>
       </div>
       <div class="flex items-center gap-4 text-sm">
         <a href="/admin/stories" class="text-indigo-600 hover:text-indigo-800">📖 Stories</a>
@@ -24,6 +25,28 @@
   </header>
 
   <main class="max-w-5xl mx-auto px-6 py-8">
+
+    <!-- KPI banner -->
+    <div class="grid grid-cols-3 gap-4 mb-7">
+      <div class="bg-white rounded-xl border border-gray-200 px-5 py-4">
+        <p class="text-xs font-medium text-gray-400 uppercase tracking-wide mb-1">Revenue today</p>
+        <p id="kpi-today" class="text-2xl font-bold text-gray-900">
+          ${{ "%.2f"|format(stats.revenue_today_cents / 100) }}
+        </p>
+      </div>
+      <div class="bg-white rounded-xl border border-gray-200 px-5 py-4">
+        <p class="text-xs font-medium text-gray-400 uppercase tracking-wide mb-1">Revenue this month</p>
+        <p id="kpi-month" class="text-2xl font-bold text-gray-900">
+          ${{ "%.2f"|format(stats.revenue_month_cents / 100) }}
+        </p>
+      </div>
+      <div class="bg-white rounded-xl border border-gray-200 px-5 py-4">
+        <p class="text-xs font-medium text-gray-400 uppercase tracking-wide mb-1">Pending orders</p>
+        <p id="kpi-pending" class="text-2xl font-bold {% if stats.pending_count > 0 %}text-amber-600{% else %}text-gray-900{% endif %}">
+          {{ stats.pending_count }}
+        </p>
+      </div>
+    </div>
 
     <!-- Search + filter bar -->
     <form method="get" action="/admin/orders" class="flex flex-wrap gap-3 mb-5">
@@ -37,8 +60,8 @@
     </form>
 
     <!-- Status filter tabs -->
-    <div class="flex gap-1 mb-5 text-sm">
-      {% for label, val in [("All", ""), ("Paid", "paid"), ("Pending", "pending"), ("Failed", "failed")] %}
+    <div class="flex flex-wrap gap-1 mb-5 text-sm">
+      {% for label, val in [("All", ""), ("Paid", "paid"), ("Pending", "pending"), ("Processing", "processing"), ("Shipped", "shipped"), ("Refunded", "refunded"), ("Failed", "failed")] %}
       <a href="/admin/orders?q={{ q }}&status={{ val }}"
          class="px-3 py-1.5 rounded-lg font-medium transition
            {% if status_filter == val %}bg-indigo-600 text-white{% else %}bg-white border border-gray-200 text-gray-600 hover:bg-gray-50{% endif %}">
@@ -113,5 +136,33 @@
 
     {% endif %}
   </main>
+
+  <script>
+    // Poll /api/admin/stats every 30s and update KPI cards + pending badge
+    async function refreshStats() {
+      try {
+        const r = await fetch('/api/admin/stats');
+        if (!r.ok) return;
+        const s = await r.json();
+        const fmt = (cents) => '$' + (cents / 100).toFixed(2);
+        document.getElementById('kpi-today').textContent = fmt(s.revenue_today_cents);
+        document.getElementById('kpi-month').textContent = fmt(s.revenue_month_cents);
+        const kpiPending = document.getElementById('kpi-pending');
+        kpiPending.textContent = s.pending_count;
+        kpiPending.className = 'text-2xl font-bold ' + (s.pending_count > 0 ? 'text-amber-600' : 'text-gray-900');
+        // Badge in header
+        const badge = document.getElementById('pending-badge');
+        if (s.pending_count > 0) {
+          badge.textContent = s.pending_count + ' pending';
+          badge.classList.remove('hidden');
+        } else {
+          badge.classList.add('hidden');
+        }
+      } catch (_) {}
+    }
+    refreshStats();
+    setInterval(refreshStats, 30000);
+  </script>
+
 </body>
 </html>

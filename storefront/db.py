@@ -121,3 +121,28 @@ def list_orders(db: Database, limit: int = 100) -> list[dict]:
         "SELECT * FROM orders ORDER BY created_at DESC LIMIT ?", (limit,)
     )
     return [dict(r) for r in rows]
+
+
+def get_stats(db: Database, today: str, month_prefix: str) -> dict:
+    """Return KPI counters for the admin dashboard.
+
+    Args:
+        today: ISO date string, e.g. "2026-06-07"
+        month_prefix: e.g. "2026-06"
+    """
+    rev_today = db.query_one(
+        "SELECT COALESCE(SUM(amount_cents), 0) FROM orders WHERE status='paid' AND created_at LIKE ?",
+        (today + "%",),
+    )
+    rev_month = db.query_one(
+        "SELECT COALESCE(SUM(amount_cents), 0) FROM orders WHERE status='paid' AND created_at LIKE ?",
+        (month_prefix + "%",),
+    )
+    pending = db.query_one(
+        "SELECT COUNT(*) FROM orders WHERE status='pending'", ()
+    )
+    return {
+        "revenue_today_cents": rev_today[0] if rev_today else 0,
+        "revenue_month_cents": rev_month[0] if rev_month else 0,
+        "pending_count": pending[0] if pending else 0,
+    }

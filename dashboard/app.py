@@ -54,7 +54,7 @@ from storefront.db import (
     Database as _SfDatabase, new_reference as _sf_new_reference,
     create_order as _sf_create_order, get_order as _sf_get_order,
     set_order_status as _sf_set_order_status, list_orders as _sf_list_orders,
-    set_order_notes as _sf_set_order_notes,
+    set_order_notes as _sf_set_order_notes, get_stats as _sf_get_stats,
 )
 from storefront.admin import seed_admins as _sf_seed_admins, is_admin as _sf_is_admin
 
@@ -1701,7 +1701,8 @@ def admin_orders(request: Request, q: str = "", status: str = "", page: int = 1)
     if _require_admin(request) is None:
         return RedirectResponse(url="/admin/login", status_code=303)
 
-    all_orders = _sf_list_orders(_store_db(), limit=10000)
+    db = _store_db()
+    all_orders = _sf_list_orders(db, limit=10000)
 
     # Enrich with human-readable book title
     title_cache: dict[str, str] = {}
@@ -1726,8 +1727,8 @@ def admin_orders(request: Request, q: str = "", status: str = "", page: int = 1)
             or q_low in o["reference"].lower()
         ]
 
-    # Filter: status
-    valid_statuses = ("pending", "paid", "failed")
+    # Filter: status (all 6 valid values)
+    valid_statuses = ("pending", "paid", "failed", "processing", "shipped", "refunded")
     if status in valid_statuses:
         all_orders = [o for o in all_orders if o["status"] == status]
 
@@ -1739,6 +1740,10 @@ def admin_orders(request: Request, q: str = "", status: str = "", page: int = 1)
     start = (page - 1) * _ORDERS_PAGE_SIZE
     orders = all_orders[start: start + _ORDERS_PAGE_SIZE]
 
+    # KPI stats
+    now = _dt.datetime.utcnow()
+    stats = _sf_get_stats(db, today=now.strftime("%Y-%m-%d"), month_prefix=now.strftime("%Y-%m"))
+
     return templates.TemplateResponse(
         request=request, name="admin_orders.html",
         context={
@@ -1748,6 +1753,7 @@ def admin_orders(request: Request, q: str = "", status: str = "", page: int = 1)
             "page": page,
             "total_pages": total_pages,
             "total": total,
+            "stats": stats,
         },
     )
 
@@ -1813,6 +1819,19 @@ async def admin_set_order_notes(reference: str, request: Request):
         raise HTTPException(status_code=404, detail="Order not found.")
     _sf_set_order_notes(db, reference, notes, now=_dt.datetime.utcnow())
     return {"reference": reference, "saved": True}
+
+
+@app.get("/api/admin/stats")
+def admin_stats(request: Request):
+    if _require_admin(request) is None:
+        raise HTTPException(status_code=401, detail="Admin sign in required.")
+    now = _dt.datetime.utcnow()
+    stats = _sf_get_stats(
+        _store_db(),
+        today=now.strftime("%Y-%m-%d"),
+        month_prefix=now.strftime("%Y-%m"),
+    )
+    return stats
 
 
 @app.post("/api/storyforge/{name}/publish")

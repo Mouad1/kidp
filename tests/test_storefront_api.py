@@ -156,6 +156,23 @@ def test_admin_orders_lists_paid(store_env, monkeypatch):
     assert "Lina" in r.text
 
 
+def test_admin_stats_returns_kpis(store_env, monkeypatch):
+    monkeypatch.setattr(appmod, "_require_admin", lambda request: {"email": "admin", "admin": True})
+    r = client.get("/api/admin/stats")
+    assert r.status_code == 200
+    body = r.json()
+    assert "revenue_today_cents" in body
+    assert "revenue_month_cents" in body
+    assert "pending_count" in body
+
+
+def test_admin_stats_requires_admin(store_env, monkeypatch):
+    monkeypatch.setattr(appmod, "_require_admin", lambda request: None)
+    r = client.get("/api/admin/stats")
+    assert r.status_code == 401
+
+
+
 def test_admin_auth_request_returns_503_without_smtp(store_env, monkeypatch):
     monkeypatch.setattr(appmod, "_sf_is_admin", lambda db, email: True)
 

@@ -68,7 +68,7 @@
       </thead>
       <tbody>
         {% for o in orders %}
-        <tr class="border-t border-gray-100 hover:bg-gray-50">
+        <tr class="border-t border-gray-100 hover:bg-gray-50 cursor-pointer" onclick="window.location='/admin/orders/{{ o.reference }}'">
           <td class="px-4 py-3">
             <img src="/admin/orders/{{ o.reference }}/photo"
                  class="w-12 h-12 object-cover rounded-lg border border-gray-200" alt="photo" />

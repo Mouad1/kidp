@@ -5,7 +5,7 @@ import threading
 import secrets
 
 _DEF_STATUS = "pending"
-_VALID_STATUS = ("pending", "paid", "failed")
+_VALID_STATUS = ("pending", "paid", "failed", "processing", "shipped", "refunded")
 
 
 class Database:
@@ -49,7 +49,12 @@ class Database:
                 );
                 """
             )
-            self._conn.commit()
+            # Additive migration: notes column (idempotent via ignore)
+            try:
+                self._conn.execute("ALTER TABLE orders ADD COLUMN notes TEXT NOT NULL DEFAULT ''")
+                self._conn.commit()
+            except sqlite3.OperationalError:
+                pass  # column already exists
 
     def execute(self, sql: str, params: tuple = ()) -> sqlite3.Cursor:
         with self._lock:
@@ -100,6 +105,14 @@ def set_order_status(db: Database, reference: str, status: str,
     db.execute(
         "UPDATE orders SET status = ?, updated_at = ? WHERE reference = ?",
         (status, now.isoformat(), reference),
+    )
+
+
+def set_order_notes(db: Database, reference: str, notes: str,
+                    now: dt.datetime) -> None:
+    db.execute(
+        "UPDATE orders SET notes = ?, updated_at = ? WHERE reference = ?",
+        ((notes or "").strip(), now.isoformat(), reference),
     )
 
 

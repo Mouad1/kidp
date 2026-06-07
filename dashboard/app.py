@@ -54,6 +54,7 @@ from storefront.db import (
     Database as _SfDatabase, new_reference as _sf_new_reference,
     create_order as _sf_create_order, get_order as _sf_get_order,
     set_order_status as _sf_set_order_status, list_orders as _sf_list_orders,
+    set_order_notes as _sf_set_order_notes,
 )
 from storefront.admin import seed_admins as _sf_seed_admins, is_admin as _sf_is_admin
 
@@ -1763,6 +1764,55 @@ def admin_order_photo(reference: str, request: Request):
         raise HTTPException(status_code=404, detail="Photo not found.")
     return FileResponse(str(path), media_type="image/png",
                         headers={"Cache-Control": "no-store"})
+
+
+@app.get("/admin/orders/{reference}", response_class=HTMLResponse)
+def admin_order_detail(reference: str, request: Request):
+    if _require_admin(request) is None:
+        return RedirectResponse(url="/admin/login", status_code=303)
+    order = _sf_get_order(_store_db(), reference)
+    if order is None:
+        raise HTTPException(status_code=404, detail="Order not found.")
+    try:
+        cfg = _store_read_config(order["slug"])
+        book_title = cfg.get("title") or order["slug"]
+    except Exception:
+        book_title = order["slug"]
+    return templates.TemplateResponse(
+        request=request, name="admin_order_detail.html",
+        context={"order": order, "book_title": book_title},
+    )
+
+
+@app.post("/admin/orders/{reference}/status")
+async def admin_set_order_status(reference: str, request: Request):
+    if _require_admin(request) is None:
+        raise HTTPException(status_code=401, detail="Admin sign in required.")
+    body = await request.json()
+    new_status = (body.get("status") or "").strip()
+    db = _store_db()
+    order = _sf_get_order(db, reference)
+    if order is None:
+        raise HTTPException(status_code=404, detail="Order not found.")
+    try:
+        _sf_set_order_status(db, reference, new_status, now=_dt.datetime.utcnow())
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+    return {"reference": reference, "status": new_status}
+
+
+@app.post("/admin/orders/{reference}/notes")
+async def admin_set_order_notes(reference: str, request: Request):
+    if _require_admin(request) is None:
+        raise HTTPException(status_code=401, detail="Admin sign in required.")
+    body = await request.json()
+    notes = (body.get("notes") or "")
+    db = _store_db()
+    order = _sf_get_order(db, reference)
+    if order is None:
+        raise HTTPException(status_code=404, detail="Order not found.")
+    _sf_set_order_notes(db, reference, notes, now=_dt.datetime.utcnow())
+    return {"reference": reference, "saved": True}
 
 
 @app.post("/api/storyforge/{name}/publish")

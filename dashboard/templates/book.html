@@ -197,6 +197,23 @@
 
 <script>
     const BOOK_NAME = '{{ book_name }}';
+    const PRESENT_FILES = new Set([
+      ...{{ (book.images_detail | default([]) | map(attribute='file') | list) | tojson }},
+      ...{{ book.extra_images | default([]) | tojson }}
+    ]);
+    const SUSPICIOUS_FILES = new Set({{ book.suspicious | default([]) | tojson }});
+
+    // Returns 'ok' (image generated & clean) or 'redo' (missing or suspicious black fill).
+    function charImageStatus(charId) {
+      const candidates = [getSequenceFileByCharId(charId), getCanonicalFileForCharId(charId)];
+      for (const file of candidates) {
+        if (file && PRESENT_FILES.has(file)) {
+          return SUSPICIOUS_FILES.has(file) ? 'redo' : 'ok';
+        }
+      }
+      return 'redo';
+    }
+
     let configData = null;
 
     async function togglePublish() {
@@ -989,6 +1006,10 @@
         (window.activeSoloIndex === i ? ' bg-indigo-50 border-indigo-200' : '');
       div.dataset.index = i;
       div.onclick = () => selectCharacter(i);
+      const imgStatus = charImageStatus(c.id);
+      const statusBadge = imgStatus === 'ok'
+        ? '<span class="shrink-0 text-[10px] font-semibold px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-700" title="Image générée">✓ Générée</span>'
+        : '<span class="shrink-0 text-[10px] font-semibold px-1.5 py-0.5 rounded bg-amber-100 text-amber-700" title="Image manquante ou à régénérer">⚠ À refaire</span>';
       div.innerHTML = `
         <span class="drag-handle text-gray-300 hover:text-gray-500 cursor-grab text-sm select-none">⠿</span>
         <div class="w-7 h-7 rounded-full bg-indigo-100 text-indigo-600 text-xs font-bold flex items-center justify-center shrink-0 select-none">
@@ -998,6 +1019,7 @@
           <p class="text-xs font-medium text-gray-800 truncate">${esc(c.name || c.id)}</p>
           <p class="text-xs text-gray-400 font-mono truncate">${esc(c.id)}</p>
         </div>
+        ${statusBadge}
         <input type="hidden" data-field="id"     value="${esc(c.id)}" />
         <input type="hidden" data-field="name"   value="${esc(c.name)}" />
         <input type="hidden" data-field="series" value="${esc(c.series || '')}" />

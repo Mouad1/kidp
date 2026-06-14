@@ -58,6 +58,7 @@ from storefront.db import (
     set_order_notes as _sf_set_order_notes, get_stats as _sf_get_stats,
 )
 from storefront.admin import seed_admins as _sf_seed_admins, is_admin as _sf_is_admin
+from storefront import i18n as _sf_i18n
 
 ROOT = pathlib.Path(__file__).parent.parent
 sys.path.insert(0, str(ROOT))
@@ -1355,6 +1356,57 @@ def _store_read_config(name: str) -> dict:
     return read_config(name)
 
 
+def _store_template_context(request: Request, **extra) -> dict:
+    """Common template context for all storefront pages."""
+    lang = _sf_i18n.resolve_language(request)
+    return {
+        "lang": lang,
+        "i18n": _sf_i18n.get_strings(lang),
+        "language_name": _sf_i18n.language_name,
+        "supported_languages": _sf_i18n.load_supported_languages(),
+        **extra,
+    }
+
+
+def _store_default_hero_name(tpl) -> str | None:
+    """Return the default hero name declared in a template, if any."""
+    for v in tpl.variables:
+        if v.key == "HERO_NAME" and v.default:
+            return v.default
+    return None
+
+
+def _store_resolve_page_text(cfg: dict, tpl, page_index: int, lang: str,
+                             default_name: str | None) -> str:
+    """Return the best available page text for the requested language.
+
+    Priority:
+    1. Book config ``pages[page_index]["text"][lang]``.
+    2. Book config ``pages[page_index]["text"][tpl.language_default]``.
+    3. Template pages[page_index].text with ``{HERO_NAME}`` replaced by
+       ``default_name`` when available.
+    """
+    text = ""
+    pages = cfg.get("pages", [])
+    if page_index < len(pages):
+        texts = pages[page_index].get("text") or {}
+        if isinstance(texts, dict):
+            if lang in texts and texts[lang]:
+                text = texts[lang]
+            elif tpl.language_default in texts and texts[tpl.language_default]:
+                text = texts[tpl.language_default]
+            else:
+                for value in texts.values():
+                    if value:
+                        text = value
+                        break
+    if not text and page_index < len(tpl.pages):
+        text = tpl.pages[page_index].text
+    if default_name:
+        text = text.replace("{HERO_NAME}", default_name)
+    return text
+
+
 def _require_session(request: Request) -> dict | None:
     token = request.cookies.get("sf_session")
     if not token:
@@ -1363,22 +1415,46 @@ def _require_session(request: Request) -> dict | None:
                               max_age=_SF_SESSION_MAX_AGE, now=_dt.datetime.utcnow())
 
 
+@app.post("/store/lang")
+def store_set_language(request: Request, lang: str = Form(...), next: str = Form("/store")):
+    """Persist storefront language in a cookie and redirect back."""
+    supported = _sf_i18n.load_supported_languages()
+    if lang not in supported:
+        lang = _sf_i18n.DEFAULT_LANGUAGE
+    # Sanitize redirect target to local paths only.
+    if not next.startswith("/"):
+        next = "/store"
+    resp = RedirectResponse(url=next, status_code=303)
+    resp.set_cookie("sf_lang", lang, httponly=True, samesite="lax",
+                    secure=_store_https(), max_age=86400 * 365)
+    return resp
+
+
 @app.get("/store", response_class=HTMLResponse)
 def store_catalog(request: Request):
+    lang = _sf_i18n.resolve_language(request)
     entries = _sf_list_catalog(_store_catalog_names(), _store_read_config)
     view = []
     for e in entries:
+        cfg = _store_read_config(e.slug)
+        book_languages = cfg.get("languages") or ["fr"]
+        if lang not in book_languages:
+            continue
         quote = _store_price_quote(e.page_count)
+        cover_url = f"/images/{e.slug}/{e.slug}_page_1.png"
         view.append({
             "slug": e.slug,
             "title": e.title,
             "page_count": e.page_count,
             "category": e.category,
             "price_display": quote["display"],
+            "languages": book_languages,
+            "intro_text": cfg.get("intro_text", ""),
+            "cover_url": cover_url,
         })
     return templates.TemplateResponse(
         request=request, name="store_catalog.html",
-        context={"entries": view},
+        context=_store_template_context(request, entries=view),
     )
 
 
@@ -1502,7 +1578,7 @@ def store_success(request: Request, reference: str = ""):
             pass
     return templates.TemplateResponse(
         request=request, name="store_success.html",
-        context={"order": order},
+        context=_store_template_context(request, order=order),
     )
 
 
@@ -1522,19 +1598,28 @@ def store_story_preview(slug: str, request: Request):
         raise HTTPException(status_code=404, detail="Book template not found.")
     if not tpl.pages:
         raise HTTPException(status_code=404, detail="No pages available.")
+
+    lang = _sf_i18n.resolve_language(request)
+    default_name = _store_default_hero_name(tpl)
     pages = []
-    for i, p in enumerate(tpl.pages):
+    for i, _ in enumerate(tpl.pages):
         image_filename = f"{slug}_page_{i + 1}.png"
         image_path = ROOT / "images" / slug / image_filename
         pages.append({
             "num": i + 1,
-            "text": p.text,
+            "text": _store_resolve_page_text(cfg, tpl, i, lang, default_name),
             "image_url": f"/images/{slug}/{image_filename}",
             "has_image": image_path.exists(),
         })
     return templates.TemplateResponse(
         request=request, name="store_story_preview.html",
-        context={"slug": slug, "title": cfg.get("title", slug), "pages": pages},
+        context=_store_template_context(
+            request,
+            slug=slug,
+            title=cfg.get("title", slug),
+            pages=pages,
+            default_name=default_name,
+        ),
     )
 
 
@@ -1552,9 +1637,13 @@ def store_personalize(slug: str, request: Request):
     quote = _store_price_quote(page_count)
     return templates.TemplateResponse(
         request=request, name="store_personalize.html",
-        context={"slug": slug, "title": cfg.get("title", slug),
-                 "page_count": page_count,
-                 "price_display": quote["display"]},
+        context=_store_template_context(
+            request,
+            slug=slug,
+            title=cfg.get("title", slug),
+            page_count=page_count,
+            price_display=quote["display"],
+        ),
     )
 
 

@@ -11,6 +11,7 @@ import pathlib
 # ── Identity ───────────────────────────────────────────────────────────────────
 
 CATEGORY       = "story"
+PUBLISHED      = True
 STORY_FORMAT   = "colored"
 STORY_LAYOUT   = "top_bottom"
 LANGUAGES      = ["fr", "en", "ar"]

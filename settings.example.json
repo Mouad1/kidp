@@ -17,5 +17,24 @@
         },
         "cover_cost": 1.0,
         "markup_multiplier": 2.5
+    },
+    "storefront": {
+        "session_secret": "",
+        "https": false,
+        "admin": {
+            "enabled": false,
+            "emails": [
+                "you@example.com"
+            ]
+        },
+        "payment_provider": "stub",
+        "smtp": {
+            "host": "",
+            "port": 587,
+            "username": "",
+            "password": "",
+            "from_addr": "no-reply@example.com",
+            "use_tls": true
+        }
     }
 }

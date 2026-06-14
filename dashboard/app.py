@@ -15,6 +15,7 @@ import importlib.util
 import os
 import pathlib
 import re
+import secrets
 import shutil
 import subprocess
 import sys
@@ -24,7 +25,7 @@ from typing import Optional
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent.parent))
 
 from fastapi import FastAPI, HTTPException, Request, Form, UploadFile, File
-from fastapi.responses import FileResponse, HTMLResponse, StreamingResponse
+from fastapi.responses import FileResponse, HTMLResponse, StreamingResponse, JSONResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 from PIL import Image, UnidentifiedImageError
 from pydantic import BaseModel
@@ -32,6 +33,7 @@ from pipeline.config_io import read_config, write_config
 from pipeline.prompt import STYLE_TAGS, POSE_TAGS, ELEMENT_TAGS, THEME_TAGS, GROUP_DYNAMICS
 
 from storyforge.templates import list_templates as _sf_list_templates, load_template as _sf_load_template
+from storyforge.errors import TemplateError as _SfTemplateError
 from storyforge.identity import build_hero as _sf_build_hero, save_sheet as _sf_save_sheet, load_sheet as _sf_load_sheet
 from storyforge.engine import resolve as _sf_resolve
 from storyforge.generator import generate_page as _sf_generate_page
@@ -39,6 +41,23 @@ from storyforge.builder import build_book as _sf_build_book
 from storyforge.i18n import translate_pages as _sf_translate_pages
 from storyforge.expand import expand_narrative as _sf_expand_narrative
 from storyforge.cover import generate_cover as _sf_generate_cover
+
+from storefront.auth import (
+    request_code as _sf_request_code, verify_code as _sf_verify_code,
+    AuthStore as _SfAuthStore, SqliteAuthStore as _SfSqliteAuthStore,
+    FakeCodeSender as _SfFakeCodeSender, SmtpCodeSender as _SfSmtpCodeSender,
+    ResendCodeSender as _SfResendCodeSender,
+)
+from storefront.session import sign as _sf_sign_session, verify as _sf_verify_session
+from storefront.catalog import list_catalog as _sf_list_catalog
+from storefront.payment import get_payment_provider as _sf_get_payment_provider
+from storefront.db import (
+    Database as _SfDatabase, new_reference as _sf_new_reference,
+    create_order as _sf_create_order, get_order as _sf_get_order,
+    set_order_status as _sf_set_order_status, list_orders as _sf_list_orders,
+    set_order_notes as _sf_set_order_notes, get_stats as _sf_get_stats,
+)
+from storefront.admin import seed_admins as _sf_seed_admins, is_admin as _sf_is_admin
 
 ROOT = pathlib.Path(__file__).parent.parent
 sys.path.insert(0, str(ROOT))
@@ -198,6 +217,7 @@ def _book_status(book_name: str) -> dict:
         "name":           book_name,
         "title":          getattr(cfg, "TITLE", book_name),
         "author":         getattr(cfg, "AUTHOR", ""),
+        "published":      getattr(cfg, "PUBLISHED", False),
         "total_chars":    len(characters),
         "in_sequence":    len(sequence),
         "present":        len(images_present),
@@ -228,6 +248,8 @@ import os
 
 @app.get("/settings")
 def view_settings(request: Request):
+    if _require_admin(request) is None:
+        return RedirectResponse(url="/admin/login", status_code=303)
     settings_file = ROOT / "settings.json"
     settings_data = {}
     if settings_file.exists():
@@ -283,12 +305,16 @@ def delete_book(book_name: str):
 
 @app.get("/", response_class=HTMLResponse)
 async def index(request: Request):
+    if _require_admin(request) is None:
+        return RedirectResponse(url="/admin/login", status_code=303)
     books = [_book_status(b) for b in _list_books()]
     return templates.TemplateResponse(request=request, name="index.html", context={"books": books})
 
 
 @app.get("/book/{book_name}", response_class=HTMLResponse)
 async def book_detail(request: Request, book_name: str):
+    if _require_admin(request) is None:
+        return RedirectResponse(url="/admin/login", status_code=303)
     status = _book_status(book_name)
     if status.get("category") == "story":
         return templates.TemplateResponse(request=request, name="story.html", context={"book": status, "book_name": book_name})
@@ -844,47 +870,6 @@ async def new_book_page(request: Request):
     return templates.TemplateResponse(request=request, name="new_book.html", context={})
 
 
-@app.get("/niche", response_class=HTMLResponse)
-async def niche_research_page(request: Request):
-    """Render the Niche Research page. Matches Module A Steps 1-2."""
-    return templates.TemplateResponse(request=request, name="niche.html", context={})
-
-
-@app.post("/api/niche-research")
-async def api_niche_research(niche: str = Form(...), csv_file: UploadFile = File(...)):
-    """Module A: Brainstorming Engine. Process BookBolt CSV and ask Gemini for sub-niches."""
-    if not os.environ.get("GEMINI_API_KEY"):
-        raise HTTPException(status_code=500, detail="GEMINI_API_KEY non configuré sur le serveur.")
-
-    tmp_path = ROOT / f"tmp_{csv_file.filename}"
-    try:
-        content = await csv_file.read()
-        tmp_path.write_bytes(content)
-
-        process = await asyncio.create_subprocess_exec(
-            sys.executable, str(ROOT / "pipeline" / "niche_research.py"),
-            "--csv", str(tmp_path),
-            "--niche", niche,
-            stdout=asyncio.subprocess.PIPE,
-            stderr=asyncio.subprocess.PIPE,
-            env=os.environ.copy()
-        )
-        stdout, stderr = await process.communicate()
-        
-        if process.returncode != 0:
-            raise HTTPException(status_code=500, detail=f"Script failed: {stderr.decode()}")
-            
-        import json
-        out_text = stdout.decode().strip()
-        try:
-            return json.loads(out_text)
-        except json.JSONDecodeError:
-            raise HTTPException(status_code=500, detail=f"Invalid JSON from Gemini: {out_text}")
-    finally:
-        if tmp_path.exists():
-            tmp_path.unlink()
-
-
 # ── Entry point ────────────────────────────────────────────────────────────────
 
 class TranslateRequest(BaseModel):
@@ -1052,6 +1037,24 @@ def _load_pricing_settings() -> dict:
     return default_pricing_settings()
 
 
+_CURRENCY_SYMBOLS = {"USD": "$", "EUR": "€", "GBP": "£"}
+
+
+def _store_price_quote(page_count: int) -> dict:
+    """Storefront retail quote for a book (color, standard paper, with cover).
+
+    Single source of truth for the price shown on the catalog, product page,
+    and used when creating the order, so they can never drift apart.
+    """
+    from pipeline.pricing import compute_price
+    quote = compute_price(page_count, color=True, paper_quality="standard",
+                          has_cover=True, settings=_load_pricing_settings())
+    currency = quote["currency"]
+    symbol = _CURRENCY_SYMBOLS.get(currency, "")
+    display = f"{symbol}{quote['price']:.2f}" if symbol else f"{quote['price']:.2f} {currency}"
+    return {"price": quote["price"], "currency": currency, "display": display}
+
+
 
 def _normalize_photo_to_png(data: bytes) -> bytes:
     """Decode an uploaded image and re-encode as PNG bytes for consistent Gemini refs."""
@@ -1068,6 +1071,8 @@ def _normalize_photo_to_png(data: bytes) -> bytes:
 
 @app.get("/storybook", response_class=HTMLResponse)
 def storybook_page(request: Request):
+    if _require_admin(request) is None:
+        return RedirectResponse(url="/admin/login", status_code=303)
     return templates.TemplateResponse(request=request, name="storybook.html", context={})
 
 
@@ -1222,6 +1227,714 @@ def storyforge_cover(name: str):
         headers={"Cache-Control": "no-store, no-cache, must-revalidate, max-age=0"},
     )
 
+
+
+# ========================================================
+# STOREFRONT (customer-facing) ROUTES
+# ========================================================
+import datetime as _dt
+
+_SF_SESSION_MAX_AGE = 86400  # 24h
+_SF_ADMIN_MAX_AGE = 86400  # 24h
+_SF_DB_HOLDER: dict = {}
+_SF_SECRET_CACHE: str | None = None
+
+
+def _load_storefront_settings() -> dict:
+    settings_file = ROOT / "settings.json"
+    if settings_file.exists():
+        try:
+            data = json.loads(settings_file.read_text())
+            sf = data.get("storefront")
+            if isinstance(sf, dict):
+                return sf
+        except (json.JSONDecodeError, OSError):
+            pass
+    return {}
+
+
+def _store_db() -> _SfDatabase:
+    """Lazily open and cache the SQLite database; seed admins from settings."""
+    db = _SF_DB_HOLDER.get("db")
+    if db is None:
+        db = _SfDatabase(ROOT / ".storefront" / "storefront.db")
+        admin_cfg = (_load_storefront_settings().get("admin") or {})
+        emails = admin_cfg.get("emails") or []
+        _sf_seed_admins(db, emails, now=_dt.datetime.utcnow())
+        _SF_DB_HOLDER["db"] = db
+    return db
+
+
+def _store_https() -> bool:
+    return bool(_load_storefront_settings().get("https", False))
+
+
+def _admin_enabled() -> bool:
+    return bool((_load_storefront_settings().get("admin") or {}).get("enabled", False))
+
+
+def _store_session_secret() -> str:
+    global _SF_SECRET_CACHE
+    if _SF_SECRET_CACHE:
+        return _SF_SECRET_CACHE
+
+    secret = (_load_storefront_settings().get("session_secret") or "").strip()
+    if not secret:
+        secret = os.environ.get("STOREFRONT_SESSION_SECRET", "").strip()
+    if not secret:
+        secret = os.environ.get("SESSION_SECRET", "").strip()
+
+    secret_file = ROOT / ".storefront" / "session_secret.txt"
+    if not secret and secret_file.exists():
+        try:
+            secret = secret_file.read_text(encoding="utf-8").strip()
+        except OSError:
+            secret = ""
+
+    if not secret:
+        secret = secrets.token_urlsafe(48)
+        try:
+            secret_file.parent.mkdir(parents=True, exist_ok=True)
+            secret_file.write_text(secret, encoding="utf-8")
+        except OSError:
+            # Keep running even if we cannot persist in this environment.
+            pass
+
+    _SF_SECRET_CACHE = secret
+    return secret
+
+
+def _store_auth_store():
+    return _SfSqliteAuthStore(_store_db())
+
+
+def _store_code_sender():
+    sf = _load_storefront_settings()
+    smtp = sf.get("smtp") or {}
+    resend_api_key = os.environ.get("RESEND_API_KEY", "").strip()
+    resend_from_addr = (
+        smtp.get("from_addr")
+        or os.environ.get("STOREFRONT_SMTP_FROM_ADDR", "")
+        or os.environ.get("RESEND_FROM", "")
+    ).strip()
+    resend_endpoint = os.environ.get("RESEND_API_BASE", "https://api.resend.com").rstrip("/") + "/emails"
+    if resend_api_key and resend_from_addr:
+        return _SfResendCodeSender(
+            api_key=resend_api_key,
+            from_addr=resend_from_addr,
+            endpoint=resend_endpoint,
+        )
+
+    host = (smtp.get("host") or os.environ.get("STOREFRONT_SMTP_HOST", "")).strip()
+    if host:
+        username = (smtp.get("username") or os.environ.get("STOREFRONT_SMTP_USERNAME", "")).strip()
+        password = (
+            smtp.get("password")
+            or os.environ.get("STOREFRONT_SMTP_PASSWORD", "")
+            or os.environ.get("SMTP_PASSWORD", "")
+        )
+        from_addr = (
+            smtp.get("from_addr")
+            or os.environ.get("STOREFRONT_SMTP_FROM_ADDR", "no-reply@example.com")
+        )
+        return _SfSmtpCodeSender(
+            host=host, port=int(smtp.get("port", os.environ.get("STOREFRONT_SMTP_PORT", 587))),
+            username=username, password=password,
+            from_addr=from_addr,
+            use_tls=bool(smtp.get("use_tls", True)),
+        )
+    return _SfFakeCodeSender()
+
+
+def _store_catalog_names() -> list[str]:
+    available = {tpl.slug for tpl in _sf_list_templates()}
+    return [name for name in _list_books() if name in available]
+
+
+def _store_read_config(name: str) -> dict:
+    return read_config(name)
+
+
+def _require_session(request: Request) -> dict | None:
+    token = request.cookies.get("sf_session")
+    if not token:
+        return None
+    return _sf_verify_session(token, _store_session_secret(),
+                              max_age=_SF_SESSION_MAX_AGE, now=_dt.datetime.utcnow())
+
+
+@app.get("/store", response_class=HTMLResponse)
+def store_catalog(request: Request):
+    entries = _sf_list_catalog(_store_catalog_names(), _store_read_config)
+    view = []
+    for e in entries:
+        quote = _store_price_quote(e.page_count)
+        view.append({
+            "slug": e.slug,
+            "title": e.title,
+            "page_count": e.page_count,
+            "category": e.category,
+            "price_display": quote["display"],
+        })
+    return templates.TemplateResponse(
+        request=request, name="store_catalog.html",
+        context={"entries": view},
+    )
+
+
+@app.post("/store/auth/request")
+async def store_auth_request(request: Request):
+    body = await request.json()
+    email = (body.get("email") or "").strip().lower()
+    if not re.match(r"^[^@\s]+@[^@\s]+\.[^@\s]+$", email):
+        raise HTTPException(status_code=400, detail="Invalid email address.")
+    try:
+        _sf_request_code(email, now=_dt.datetime.utcnow(),
+                         code_sender=_store_code_sender(), store=_store_auth_store())
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail=f"Failed to send email code: {exc}")
+    return JSONResponse({"sent": True})
+
+
+@app.post("/store/auth/verify")
+async def store_auth_verify(request: Request):
+    body = await request.json()
+    email = (body.get("email") or "").strip().lower()
+    code = (body.get("code") or "").strip()
+    ok = _sf_verify_code(email, code, now=_dt.datetime.utcnow(), store=_store_auth_store())
+    if not ok:
+        raise HTTPException(status_code=401, detail="Invalid or expired code.")
+    token = _sf_sign_session({"email": email}, _store_session_secret(),
+                             now=_dt.datetime.utcnow())
+    resp = JSONResponse({"authenticated": True})
+    resp.set_cookie("sf_session", token, httponly=True, samesite="lax",
+                    secure=_store_https(), max_age=_SF_SESSION_MAX_AGE)
+    return resp
+
+
+@app.post("/store/{slug}/preview")
+async def store_preview(slug: str,
+                        child_name: str = Form(...),
+                        photo: UploadFile = File(...),
+                        photo2: UploadFile | None = File(default=None)):
+    """Free-trial face-swap preview: generates ONLY the cover + page 1.
+
+    No order is created. Photos are never persisted. The response contains
+    cover and page-1 PNGs as base64 data-URIs for immediate display.
+    Strictly 3 Gemini image calls: 1 portrait + 1 cover + 1 page-1.
+    """
+    if not re.match(r'^[a-z0-9][a-z0-9-]*[a-z0-9]$', slug):
+        raise HTTPException(status_code=400, detail="Invalid book name")
+    child = (child_name or "").strip()
+    if not child:
+        raise HTTPException(status_code=400, detail="Child name is required.")
+    try:
+        cfg = _store_read_config(slug)
+    except FileNotFoundError:
+        raise HTTPException(status_code=404, detail="Book not found.")
+    if not cfg.get("published"):
+        raise HTTPException(status_code=404, detail="Book not found.")
+
+    photos: list[bytes] = []
+    raw = await photo.read()
+    if not raw:
+        raise HTTPException(status_code=400, detail="Empty photo.")
+    if len(raw) > 12 * 1024 * 1024:
+        raise HTTPException(status_code=400, detail="Photo too large (max 12 MB).")
+    photos.append(_normalize_photo_to_png(raw))
+    if photo2 is not None:
+        raw2 = await photo2.read()
+        if raw2:
+            if len(raw2) > 12 * 1024 * 1024:
+                raise HTTPException(status_code=400, detail="Photo 2 too large (max 12 MB).")
+            photos.append(_normalize_photo_to_png(raw2))
+
+    try:
+        tpl = _sf_load_template(slug)
+    except _SfTemplateError:
+        raise HTTPException(status_code=404, detail="Book template not found.")
+
+    import asyncio
+    import base64
+
+    def _run_preview() -> dict:
+        gen = _backend_provider()
+        # 1 image call: build hero portrait from customer photos
+        sheet = _sf_build_hero(photos, tpl.art_style, gen, _analyze_provider)
+        # Resolve template page specs with child name substituted
+        variables: dict[str, str] = {k: child for k in ("HERO_NAME", "NAME", "CHILD_NAME")}
+        safe_vars = {k: v for k, v in variables.items() if k != "HERO_NAME"}
+        specs = _sf_resolve(tpl, safe_vars, sheet)
+        # 1 image call: page 1 only
+        page1_png: bytes | None = _sf_generate_page(specs[0], sheet, gen) if specs else None
+        # 1 image call: cover
+        cover_png = _sf_generate_cover(child, sheet, gen)
+
+        def b64(data: bytes) -> str:
+            return "data:image/png;base64," + base64.b64encode(data).decode()
+
+        return {
+            "cover": b64(cover_png),
+            "page1": b64(page1_png) if page1_png else None,
+            "page_count": len(tpl.pages),
+        }
+
+    loop = asyncio.get_event_loop()
+    try:
+        result = await loop.run_in_executor(None, _run_preview)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail=f"Preview generation failed: {exc}")
+
+    return JSONResponse(result)
+
+
+@app.get("/store/success", response_class=HTMLResponse)
+def store_success(request: Request, reference: str = ""):
+    """Post-payment success page. Validates order status from DB and shows confirmation."""
+    order: dict | None = None
+    if reference:
+        try:
+            db = _store_db()
+            order = _sf_get_order(db, reference)
+        except Exception:
+            pass
+    return templates.TemplateResponse(
+        request=request, name="store_success.html",
+        context={"order": order},
+    )
+
+
+@app.get("/store/{slug}", response_class=HTMLResponse)
+def store_personalize(slug: str, request: Request):
+    if not re.match(r'^[a-z0-9][a-z0-9-]*[a-z0-9]$', slug):
+        raise HTTPException(status_code=400, detail="Invalid book name")
+    try:
+        cfg = _store_read_config(slug)
+    except FileNotFoundError:
+        raise HTTPException(status_code=404, detail="Book not found.")
+    if not cfg.get("published"):
+        raise HTTPException(status_code=404, detail="Book not found.")
+    page_count = len(cfg.get("pages", []))
+    quote = _store_price_quote(page_count)
+    return templates.TemplateResponse(
+        request=request, name="store_personalize.html",
+        context={"slug": slug, "title": cfg.get("title", slug),
+                 "page_count": page_count,
+                 "price_display": quote["display"]},
+    )
+
+
+@app.post("/store/{slug}/order")
+async def store_create_order(slug: str, request: Request,
+                             child_name: str = Form(...),
+                             photo: UploadFile = File(...)):
+    if not re.match(r'^[a-z0-9][a-z0-9-]*[a-z0-9]$', slug):
+        raise HTTPException(status_code=400, detail="Invalid book name")
+    session = _require_session(request)
+    if session is None:
+        raise HTTPException(status_code=401, detail="Sign in to continue.")
+    child = (child_name or "").strip()
+    if not child:
+        raise HTTPException(status_code=400, detail="Child name is required.")
+    try:
+        cfg = _store_read_config(slug)
+    except FileNotFoundError:
+        raise HTTPException(status_code=404, detail="Book not found.")
+    if not cfg.get("published"):
+        raise HTTPException(status_code=404, detail="Book not found.")
+
+    data = await photo.read()
+    if not data:
+        raise HTTPException(status_code=400, detail="Empty photo.")
+    if len(data) > 12 * 1024 * 1024:
+        raise HTTPException(status_code=400, detail="Photo too large (max 12 MB).")
+    png_data = _normalize_photo_to_png(data)
+
+    page_count = len(cfg.get("pages", []))
+    quote = _store_price_quote(page_count)
+    amount_cents = int(round(quote["price"] * 100))
+
+    db = _store_db()
+    reference = _sf_new_reference(slug)
+    order_dir = ROOT / ".storefront" / "orders" / reference
+    order_dir.mkdir(parents=True, exist_ok=True)
+    photo_path = order_dir / "photo.png"
+    photo_path.write_bytes(png_data)
+
+    _sf_create_order(
+        db, reference=reference, slug=slug, email=session["email"],
+        child_name=child, photo_path=str(photo_path), page_count=page_count,
+        amount_cents=amount_cents, currency=quote["currency"], now=_dt.datetime.utcnow(),
+    )
+    return JSONResponse({
+        "reference": reference, "amount": amount_cents,
+        "currency": quote["currency"], "status": "pending",
+    })
+
+
+@app.post("/store/{slug}/checkout")
+async def store_checkout(slug: str, request: Request):
+    if not re.match(r'^[a-z0-9][a-z0-9-]*[a-z0-9]$', slug):
+        raise HTTPException(status_code=400, detail="Invalid book name")
+    session = _require_session(request)
+    if session is None:
+        raise HTTPException(status_code=401, detail="Sign in to continue.")
+    body = await request.json()
+    reference = (body.get("reference") or "").strip()
+    if not reference:
+        raise HTTPException(status_code=400, detail="Missing order reference.")
+    db = _store_db()
+    order = _sf_get_order(db, reference)
+    if order is None or order["slug"] != slug:
+        raise HTTPException(status_code=404, detail="Order not found.")
+    if order["email"] != session["email"]:
+        raise HTTPException(status_code=403, detail="This order belongs to another account.")
+
+    base = str(request.base_url).rstrip("/")
+    provider = _sf_get_payment_provider(_load_storefront_settings())
+    checkout = provider.create_checkout(
+        amount=order["amount_cents"], currency=order["currency"], reference=reference,
+        success_url=f"{base}/store/success?reference={reference}",
+        cancel_url=f"{base}/store/{slug}",
+    )
+    if checkout.status == "paid":
+        _sf_set_order_status(db, reference, "paid", now=_dt.datetime.utcnow())
+    return JSONResponse({
+        "reference": checkout.reference, "amount": checkout.amount,
+        "currency": checkout.currency, "status": checkout.status, "url": checkout.url,
+    })
+
+
+@app.post("/store/{slug}/pay")
+async def store_pay(slug: str, request: Request,
+                    child_name: str = Form(...),
+                    photo: UploadFile = File(...)):
+    """Single-step: create order + Stripe Checkout Session, return redirect URL."""
+    if not re.match(r'^[a-z0-9][a-z0-9-]*[a-z0-9]$', slug):
+        raise HTTPException(status_code=400, detail="Invalid book name")
+    session = _require_session(request)
+    if session is None:
+        raise HTTPException(status_code=401, detail="Sign in to continue.")
+    child = (child_name or "").strip()
+    if not child:
+        raise HTTPException(status_code=400, detail="Child name is required.")
+    try:
+        cfg = _store_read_config(slug)
+    except FileNotFoundError:
+        raise HTTPException(status_code=404, detail="Book not found.")
+    if not cfg.get("published"):
+        raise HTTPException(status_code=404, detail="Book not found.")
+
+    data = await photo.read()
+    if not data:
+        raise HTTPException(status_code=400, detail="Empty photo.")
+    if len(data) > 12 * 1024 * 1024:
+        raise HTTPException(status_code=400, detail="Photo too large (max 12 MB).")
+    png_data = _normalize_photo_to_png(data)
+
+    page_count = len(cfg.get("pages", []))
+    quote = _store_price_quote(page_count)
+    amount_cents = int(round(quote["price"] * 100))
+
+    db = _store_db()
+    reference = _sf_new_reference(slug)
+    order_dir = ROOT / ".storefront" / "orders" / reference
+    order_dir.mkdir(parents=True, exist_ok=True)
+    photo_path = order_dir / "photo.png"
+    photo_path.write_bytes(png_data)
+
+    _sf_create_order(
+        db, reference=reference, slug=slug, email=session["email"],
+        child_name=child, photo_path=str(photo_path), page_count=page_count,
+        amount_cents=amount_cents, currency=quote["currency"], now=_dt.datetime.utcnow(),
+    )
+
+    base = str(request.base_url).rstrip("/")
+    provider = _sf_get_payment_provider(_load_storefront_settings())
+    checkout = provider.create_checkout(
+        amount=amount_cents, currency=quote["currency"], reference=reference,
+        success_url=f"{base}/store/success?reference={reference}",
+        cancel_url=f"{base}/store/{slug}",
+        customer_email=session["email"],
+    )
+    if checkout.status == "paid":
+        _sf_set_order_status(db, reference, "paid", now=_dt.datetime.utcnow())
+    return JSONResponse({
+        "reference": checkout.reference,
+        "url": checkout.url,
+        "status": checkout.status,
+    })
+
+
+@app.post("/store/webhook/stripe")
+async def stripe_webhook(request: Request):
+    payload = await request.body()
+    sig_header = request.headers.get("stripe-signature", "")
+    webhook_secret = os.environ.get("STRIPE_WEBHOOK_SECRET", "").strip()
+
+    if webhook_secret:
+        import stripe as _stripe
+        try:
+            event = _stripe.Webhook.construct_event(payload, sig_header, webhook_secret)
+        except Exception:
+            raise HTTPException(status_code=400, detail="Invalid Stripe signature.")
+    else:
+        import json as _json
+        event = _json.loads(payload)
+
+    if event.get("type") == "checkout.session.completed":
+        reference = (event.get("data") or {}).get("object", {}).get("client_reference_id") or ""
+        if reference:
+            db = _store_db()
+            order = _sf_get_order(db, reference)
+            if order:
+                _sf_set_order_status(db, reference, "paid", now=_dt.datetime.utcnow())
+
+    return JSONResponse({"received": True})
+
+
+# ── Admin authentication (email allowlist + one-time code) ───────────────────────
+
+def _require_admin(request: Request) -> dict | None:
+    """Return admin session dict, or None. When admin auth is disabled, allow all."""
+    if not _admin_enabled():
+        return {"email": "local-admin", "admin": True}
+    token = request.cookies.get("sf_admin")
+    if not token:
+        return None
+    data = _sf_verify_session(token, _store_session_secret(),
+                              max_age=_SF_ADMIN_MAX_AGE, now=_dt.datetime.utcnow())
+    if not data or not data.get("admin"):
+        return None
+    return data
+
+
+@app.get("/admin/login", response_class=HTMLResponse)
+def admin_login(request: Request):
+    return templates.TemplateResponse(request=request, name="admin_login.html", context={})
+
+
+@app.post("/admin/auth/request")
+async def admin_auth_request(request: Request):
+    body = await request.json()
+    email = (body.get("email") or "").strip().lower()
+    if not re.match(r"^[^@\s]+@[^@\s]+\.[^@\s]+$", email):
+        raise HTTPException(status_code=400, detail="Invalid email address.")
+    if not _sf_is_admin(_store_db(), email):
+        raise HTTPException(status_code=403, detail="This email is not an administrator.")
+    sender = _store_code_sender()
+    if isinstance(sender, _SfFakeCodeSender):
+        raise HTTPException(
+            status_code=503,
+            detail=(
+                "Email delivery is not configured. Set storefront.smtp in settings.json "
+                "or STOREFRONT_SMTP_* environment variables."
+            ),
+        )
+    try:
+        _sf_request_code(email, now=_dt.datetime.utcnow(),
+                         code_sender=sender, store=_store_auth_store())
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail=f"Failed to send email code: {exc}")
+    return JSONResponse({"sent": True})
+
+
+@app.post("/admin/auth/verify")
+async def admin_auth_verify(request: Request):
+    body = await request.json()
+    email = (body.get("email") or "").strip().lower()
+    code = (body.get("code") or "").strip()
+    if not _sf_is_admin(_store_db(), email):
+        raise HTTPException(status_code=403, detail="This email is not an administrator.")
+    ok = _sf_verify_code(email, code, now=_dt.datetime.utcnow(), store=_store_auth_store())
+    if not ok:
+        raise HTTPException(status_code=401, detail="Invalid or expired code.")
+    token = _sf_sign_session({"email": email, "admin": True}, _store_session_secret(),
+                             now=_dt.datetime.utcnow())
+    resp = JSONResponse({"authenticated": True})
+    resp.set_cookie("sf_admin", token, httponly=True, samesite="lax",
+                    secure=_store_https(), max_age=_SF_ADMIN_MAX_AGE)
+    return resp
+
+
+_ORDERS_PAGE_SIZE = 20
+
+
+@app.get("/admin/orders", response_class=HTMLResponse)
+def admin_orders(request: Request, q: str = "", status: str = "", page: int = 1):
+    if _require_admin(request) is None:
+        return RedirectResponse(url="/admin/login", status_code=303)
+
+    db = _store_db()
+    all_orders = _sf_list_orders(db, limit=10000)
+
+    # Enrich with human-readable book title
+    title_cache: dict[str, str] = {}
+    for o in all_orders:
+        slug = o["slug"]
+        if slug not in title_cache:
+            try:
+                cfg = _store_read_config(slug)
+                title_cache[slug] = cfg.get("title") or slug
+            except Exception:
+                title_cache[slug] = slug
+        o["book_title"] = title_cache[slug]
+
+    # Filter: text search on email, child_name, slug, reference
+    if q:
+        q_low = q.strip().lower()
+        all_orders = [
+            o for o in all_orders
+            if q_low in o["email"].lower()
+            or q_low in o["child_name"].lower()
+            or q_low in o["slug"].lower()
+            or q_low in o["reference"].lower()
+        ]
+
+    # Filter: status (all 6 valid values)
+    valid_statuses = ("pending", "paid", "failed", "processing", "shipped", "refunded")
+    if status in valid_statuses:
+        all_orders = [o for o in all_orders if o["status"] == status]
+
+    # Pagination
+    total = len(all_orders)
+    page = max(1, page)
+    total_pages = max(1, (total + _ORDERS_PAGE_SIZE - 1) // _ORDERS_PAGE_SIZE)
+    page = min(page, total_pages)
+    start = (page - 1) * _ORDERS_PAGE_SIZE
+    orders = all_orders[start: start + _ORDERS_PAGE_SIZE]
+
+    # KPI stats
+    now = _dt.datetime.utcnow()
+    stats = _sf_get_stats(db, today=now.strftime("%Y-%m-%d"), month_prefix=now.strftime("%Y-%m"))
+
+    return templates.TemplateResponse(
+        request=request, name="admin_orders.html",
+        context={
+            "orders": orders,
+            "q": q,
+            "status_filter": status,
+            "page": page,
+            "total_pages": total_pages,
+            "total": total,
+            "stats": stats,
+        },
+    )
+
+
+@app.get("/admin/orders/{reference}/photo")
+def admin_order_photo(reference: str, request: Request):
+    if _require_admin(request) is None:
+        raise HTTPException(status_code=401, detail="Admin sign in required.")
+    order = _sf_get_order(_store_db(), reference)
+    if order is None:
+        raise HTTPException(status_code=404, detail="Order not found.")
+    path = pathlib.Path(order["photo_path"])
+    if not path.exists():
+        raise HTTPException(status_code=404, detail="Photo not found.")
+    return FileResponse(str(path), media_type="image/png",
+                        headers={"Cache-Control": "no-store"})
+
+
+@app.get("/admin/orders/{reference}", response_class=HTMLResponse)
+def admin_order_detail(reference: str, request: Request):
+    if _require_admin(request) is None:
+        return RedirectResponse(url="/admin/login", status_code=303)
+    order = _sf_get_order(_store_db(), reference)
+    if order is None:
+        raise HTTPException(status_code=404, detail="Order not found.")
+    try:
+        cfg = _store_read_config(order["slug"])
+        book_title = cfg.get("title") or order["slug"]
+    except Exception:
+        book_title = order["slug"]
+    return templates.TemplateResponse(
+        request=request, name="admin_order_detail.html",
+        context={"order": order, "book_title": book_title},
+    )
+
+
+@app.post("/admin/orders/{reference}/status")
+async def admin_set_order_status(reference: str, request: Request):
+    if _require_admin(request) is None:
+        raise HTTPException(status_code=401, detail="Admin sign in required.")
+    body = await request.json()
+    new_status = (body.get("status") or "").strip()
+    db = _store_db()
+    order = _sf_get_order(db, reference)
+    if order is None:
+        raise HTTPException(status_code=404, detail="Order not found.")
+    try:
+        _sf_set_order_status(db, reference, new_status, now=_dt.datetime.utcnow())
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+    return {"reference": reference, "status": new_status}
+
+
+@app.post("/admin/orders/{reference}/notes")
+async def admin_set_order_notes(reference: str, request: Request):
+    if _require_admin(request) is None:
+        raise HTTPException(status_code=401, detail="Admin sign in required.")
+    body = await request.json()
+    notes = (body.get("notes") or "")
+    db = _store_db()
+    order = _sf_get_order(db, reference)
+    if order is None:
+        raise HTTPException(status_code=404, detail="Order not found.")
+    _sf_set_order_notes(db, reference, notes, now=_dt.datetime.utcnow())
+    return {"reference": reference, "saved": True}
+
+
+@app.get("/api/admin/stats")
+def admin_stats(request: Request):
+    if _require_admin(request) is None:
+        raise HTTPException(status_code=401, detail="Admin sign in required.")
+    now = _dt.datetime.utcnow()
+    stats = _sf_get_stats(
+        _store_db(),
+        today=now.strftime("%Y-%m-%d"),
+        month_prefix=now.strftime("%Y-%m"),
+    )
+    return stats
+
+
+@app.post("/api/storyforge/{name}/publish")
+def storyforge_publish(name: str, published: bool = True):
+    if not re.match(r'^[a-z0-9][a-z0-9-]*[a-z0-9]$', name):
+        raise HTTPException(status_code=400, detail="Invalid book name")
+    try:
+        cfg = read_config(name)
+    except FileNotFoundError:
+        raise HTTPException(status_code=404, detail="Book not found.")
+    cfg["published"] = published
+    write_config(name, cfg)
+    return {"name": name, "published": published}
+
+
+@app.get("/admin/stories", response_class=HTMLResponse)
+def admin_stories(request: Request):
+    if _require_admin(request) is None:
+        return RedirectResponse(url="/admin/login", status_code=303)
+    all_orders = _sf_list_orders(_store_db(), limit=10000)
+    order_counts: dict[str, int] = {}
+    for o in all_orders:
+        order_counts[o["slug"]] = order_counts.get(o["slug"], 0) + 1
+    entries = []
+    for name in _list_books():
+        status = _book_status(name)
+        entries.append({
+            "slug":        name,
+            "title":       status.get("title", name),
+            "category":    status.get("category", ""),
+            "page_count":  status.get("in_sequence", 0),
+            "order_count": order_counts.get(name, 0),
+            "published":   status.get("published", False),
+        })
+    return templates.TemplateResponse(
+        request=request, name="admin_stories.html", context={"entries": entries},
+    )
 
 
 if __name__ == "__main__":

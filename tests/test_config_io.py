@@ -34,9 +34,27 @@ def test_read_config_returns_dict(fake_book):
     assert data["title"] == "Test Book"
     assert data["author"] == "Marco Belghiti"
     assert data["images_folder"] == "book-test"
-    assert data["characters"] == [{"id": "hero", "name": "The Hero", "series": "S1", "prompt": "a hero"}]
+    char = data["characters"][0]
+    assert char["id"] == "hero"
+    assert char["name"] == "The Hero"
+    assert char["series"] == "S1"
+    assert char["prompt"] == "a hero"
     assert data["page_sequence"] == [{"file": "book_test_hero.png", "label": "The Hero"}]
     assert data["title_page_lines"] == [["Test Book", 120, True, [0, 0, 0]]]
+
+
+def test_read_config_defaults_published_false(fake_book):
+    data = read_config("book-test")
+    assert data["published"] is False
+
+
+def test_write_config_roundtrips_published(fake_book, monkeypatch):
+    import pipeline.config_io as cio
+    monkeypatch.setattr(cio, "ROOT", fake_book)
+    data = read_config("book-test")
+    data["published"] = True
+    write_config("book-test", data)
+    assert read_config("book-test")["published"] is True
 
 
 def test_read_config_missing_book(tmp_path, monkeypatch):

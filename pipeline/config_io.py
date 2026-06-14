@@ -59,6 +59,7 @@ def read_config(book_name: str) -> dict:
 
     return {
         "category":             getattr(module, "CATEGORY", "coloring"),
+        "published":            getattr(module, "PUBLISHED", False),
         "story_format":         getattr(module, "STORY_FORMAT", "colored"),
         "story_layout":         getattr(module, "STORY_LAYOUT", "top_bottom"),
         "languages":            getattr(module, "LANGUAGES", ["fr"]),
@@ -124,6 +125,7 @@ def write_config(book_name: str, data: dict) -> None:
 
     content = _render_config(
         category             = data.get("category", "coloring"),
+        published            = data.get("published", False),
         story_format         = data.get("story_format", "colored"),
         story_layout         = data.get("story_layout", "top_bottom"),
         languages            = data.get("languages", ["fr"]),
@@ -150,6 +152,7 @@ def write_config(book_name: str, data: dict) -> None:
 
 def _render_config(
     category: str,
+    published: bool,
     story_format: str,
     story_layout: str,
     languages: list,
@@ -225,6 +228,7 @@ def _render_config(
         f'import pathlib\n\n'
         f'# ── Identity ───────────────────────────────────────────────────────────────────\n\n'
         f'CATEGORY       = {json.dumps(category, ensure_ascii=False)}\n'
+        f'PUBLISHED      = {published!r}\n'
         f'STORY_FORMAT   = {json.dumps(story_format, ensure_ascii=False)}\n'
         f'STORY_LAYOUT   = {json.dumps(story_layout, ensure_ascii=False)}\n'
         f'LANGUAGES      = {json.dumps(languages, ensure_ascii=False)}\n'

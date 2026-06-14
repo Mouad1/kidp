@@ -1,0 +1,244 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>{{ title }} · StoryForge</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .spin { animation: spin .8s linear infinite; }
+  </style>
+</head>
+
+<body class="bg-gray-50 text-gray-900 min-h-screen">
+
+  <header class="bg-white border-b border-gray-200 px-6 py-4">
+    <div class="max-w-3xl mx-auto flex items-center justify-between">
+      <div class="flex items-center gap-3">
+        <span class="text-2xl">✨</span>
+        <h1 class="text-lg font-bold">StoryForge</h1>
+      </div>
+      <a href="/store" class="text-sm text-gray-600 hover:text-gray-900">← All stories</a>
+    </div>
+  </header>
+
+  <main class="max-w-3xl mx-auto px-6 py-10" data-slug="{{ slug }}">
+    <h2 class="text-2xl font-bold mb-1">{{ title }}</h2>
+    <div class="flex items-center gap-3 mb-8">
+      <span class="text-2xl font-bold text-gray-900">{{ price_display }}</span>
+      <span class="text-gray-400">·</span>
+      <span class="text-gray-500">{{ page_count }} pages, personalized for your child.</span>
+    </div>
+
+    <!-- Step 1: child details -->
+    <section id="step-details" class="bg-white rounded-xl border border-gray-200 p-6 mb-6">
+      <h3 class="font-bold mb-4">1. Your child</h3>
+      <label class="block text-sm font-medium mb-1">Child's first name</label>
+      <input id="child-name" type="text" placeholder="e.g. Lina"
+             class="w-full border border-gray-300 rounded-lg px-3 py-2 mb-4" />
+      <label class="block text-sm font-medium mb-1">Photo</label>
+      <input id="child-photo" type="file" accept="image/*"
+             class="w-full text-sm mb-2" />
+      <label class="block text-sm font-medium mb-1 mt-2 text-gray-500">Second photo <span class="font-normal">(optional, improves accuracy)</span></label>
+      <input id="child-photo2" type="file" accept="image/*"
+             class="w-full text-sm mb-4" />
+      <button id="to-preview"
+              class="bg-purple-600 text-white font-medium px-5 py-2 rounded-lg hover:bg-purple-700 disabled:opacity-50">
+        Preview my book
+      </button>
+      <div id="details-error" class="hidden mt-2 text-sm text-red-600"></div>
+    </section>
+
+    <!-- Step 2: face-swap preview -->
+    <section id="step-preview" class="hidden bg-white rounded-xl border border-gray-200 p-6 mb-6">
+      <h3 class="font-bold mb-4">2. Your child in the story</h3>
+      <!-- Skeleton loader (shown while generating) -->
+      <div id="preview-skeleton" class="space-y-3">
+        <div class="animate-pulse">
+          <div class="h-3 w-40 bg-gray-200 rounded mb-4"></div>
+          <div class="flex gap-4">
+            <div class="w-44 h-64 bg-gray-200 rounded-xl"></div>
+            <div class="w-44 h-64 bg-gray-200 rounded-xl"></div>
+          </div>
+        </div>
+        <p id="preview-status" class="text-xs text-gray-400">Personalizing your story, this takes about 30s...</p>
+      </div>
+      <!-- Result (revealed after generation) -->
+      <div id="preview-result" class="hidden">
+        <p class="text-sm text-gray-600 mb-4">Here's a sneak peek — cover and first page starred by <strong id="preview-child-name"></strong>:</p>
+        <div class="flex flex-wrap gap-4">
+          <div>
+            <p class="text-xs text-gray-400 mb-1 font-medium uppercase tracking-wide">Cover</p>
+            <img id="preview-cover" alt="Personalized cover"
+                 class="w-44 rounded-xl border border-gray-200 shadow-sm" />
+          </div>
+          <div>
+            <p class="text-xs text-gray-400 mb-1 font-medium uppercase tracking-wide">Page 1</p>
+            <img id="preview-page1" alt="Page 1 preview"
+                 class="w-44 rounded-xl border border-gray-200 shadow-sm" />
+          </div>
+          <div class="flex-1 min-w-[180px]">
+            <p class="text-xs text-gray-400 mb-1 font-medium uppercase tracking-wide">Rest of the book</p>
+            <div class="w-44 h-64 bg-gray-100 rounded-xl border border-dashed border-gray-300 flex flex-col items-center justify-center text-center px-4">
+              <span class="text-2xl mb-2">📖</span>
+              <p class="text-xs text-gray-500">{{ page_count }} pages of adventure await after purchase.</p>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div id="preview-error" class="hidden mt-3 text-sm text-red-600"></div>
+    </section>
+
+    <!-- Step 3: checkout -->
+    <section id="step-checkout" class="hidden bg-white rounded-xl border border-gray-200 p-6">
+      <h3 class="font-bold mb-4">3. Order</h3>
+      <div id="auth-box">
+        <p class="text-sm text-gray-500 mb-3">Enter your email to receive a confirmation code.</p>
+        <div class="flex gap-2 mb-3">
+          <input id="email" type="email" placeholder="you@example.com"
+                 class="flex-1 border border-gray-300 rounded-lg px-3 py-2" />
+          <button id="send-code"
+                  class="bg-gray-900 text-white px-4 py-2 rounded-lg hover:bg-gray-700">Send code</button>
+        </div>
+        <div id="send-code-error" class="hidden mb-2 text-sm text-red-600"></div>
+        <div id="code-row" class="hidden flex gap-2 mb-3">
+          <input id="code" type="text" inputmode="numeric" placeholder="6 digit code"
+                 class="flex-1 border border-gray-300 rounded-lg px-3 py-2" />
+          <button id="verify-code"
+                  class="bg-gray-900 text-white px-4 py-2 rounded-lg hover:bg-gray-700">Verify</button>
+        </div>
+        <div id="verify-code-error" class="hidden mb-2 text-sm text-red-600"></div>
+      </div>
+      <div id="pay-box" class="hidden">
+        <button id="checkout"
+                class="bg-purple-600 text-white font-medium px-5 py-2 rounded-lg hover:bg-purple-700">
+          Continue to payment
+        </button>
+      </div>
+      <div id="checkout-status" class="text-sm text-gray-500 mt-3"></div>
+    </section>
+  </main>
+
+  <script>
+    const slug = document.querySelector("main").dataset.slug;
+    const $ = (id) => document.getElementById(id);
+
+    function inlineError(id, msg) {
+      const el = $(id);
+      if (!el) return;
+      el.textContent = msg || '';
+      el.classList.toggle('hidden', !msg);
+    }
+
+    $('to-preview').addEventListener('click', async () => {
+      if (!$('child-name').value.trim()) { inlineError('details-error', 'Please enter your child\u2019s name.'); return; }
+      if (!$('child-photo').files.length) { inlineError('details-error', 'Please add a photo.'); return; }
+      inlineError('details-error', null);
+
+      // Show Step 2 with skeleton
+      $('step-preview').classList.remove('hidden');
+      $('preview-skeleton').classList.remove('hidden');
+      $('preview-result').classList.add('hidden');
+      inlineError('preview-error', null);
+      $('step-preview').scrollIntoView({ behavior: 'smooth' });
+
+      // Disable the button while generating
+      const btn = $('to-preview');
+      btn.disabled = true;
+      btn.textContent = 'Generating...';
+
+      try {
+        const fd = new FormData();
+        fd.append('child_name', $('child-name').value.trim());
+        fd.append('photo', $('child-photo').files[0]);
+        const f2 = $('child-photo2').files[0];
+        if (f2) fd.append('photo2', f2);
+
+        const r = await fetch('/store/' + slug + '/preview', { method: 'POST', body: fd });
+        if (!r.ok) {
+          const err = await r.json().catch(() => ({}));
+          inlineError('preview-error', err.detail || 'Preview failed. Please try again.');
+          $('preview-skeleton').classList.add('hidden');
+          return;
+        }
+        const data = await r.json();
+
+        // Reveal personalized images
+        $('preview-cover').src = data.cover;
+        if (data.page1) $('preview-page1').src = data.page1;
+        else $('preview-page1').closest('div').classList.add('hidden');
+        $('preview-child-name').textContent = $('child-name').value.trim();
+
+        $('preview-skeleton').classList.add('hidden');
+        $('preview-result').classList.remove('hidden');
+        $('step-checkout').classList.remove('hidden');
+        $('step-checkout').scrollIntoView({ behavior: 'smooth' });
+      } catch (e) {
+        inlineError('preview-error', 'Network error. Please try again.');
+        $('preview-skeleton').classList.add('hidden');
+      } finally {
+        btn.disabled = false;
+        btn.textContent = 'Preview my book';
+      }
+    });
+
+    $('send-code').addEventListener('click', async () => {
+      const email = $('email').value.trim();
+      if (!email) { inlineError('send-code-error', 'Please enter your email address.'); return; }
+      inlineError('send-code-error', null);
+      const r = await fetch('/store/auth/request', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email }),
+      });
+      if (r.ok) { $('code-row').classList.remove('hidden'); }
+      else { inlineError('send-code-error', 'Could not send code. Check the email address.'); }
+    });
+
+    $('verify-code').addEventListener('click', async () => {
+      const email = $('email').value.trim();
+      const code = $('code').value.trim();
+      const r = await fetch('/store/auth/verify', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, code }),
+      });
+      if (r.ok) {
+        $('auth-box').classList.add('hidden');
+        $('pay-box').classList.remove('hidden');
+      } else { inlineError('verify-code-error', 'Invalid or expired code.'); }
+    });
+
+    $('checkout').addEventListener('click', async () => {
+      const btn = $('checkout');
+      btn.disabled = true;
+      btn.textContent = 'Redirecting to payment...';
+      $('checkout-status').textContent = 'Creating your order...';
+
+      const fd = new FormData();
+      fd.append('child_name', $('child-name').value.trim());
+      fd.append('photo', $('child-photo').files[0]);
+
+      try {
+        const r = await fetch('/store/' + slug + '/pay', { method: 'POST', body: fd });
+        if (!r.ok) {
+          const err = await r.json().catch(() => ({}));
+          $('checkout-status').textContent = err.detail || 'Could not process your order. Please try again.';
+          btn.disabled = false;
+          btn.textContent = 'Continue to payment';
+          return;
+        }
+        const data = await r.json();
+        $('checkout-status').textContent = 'Redirecting to Stripe...';
+        window.location.href = data.url;
+      } catch (e) {
+        $('checkout-status').textContent = 'Network error. Please try again.';
+        btn.disabled = false;
+        btn.textContent = 'Continue to payment';
+      }
+
+    });
+  </script>
+
+</body>
+</html>

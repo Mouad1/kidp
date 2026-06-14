@@ -1,12 +1,14 @@
-.PHONY: dashboard generate generate-dry assemble niche-research help
+.PHONY: dashboard storefront storefront-check storefront-send-test generate generate-dry assemble help
 
 help:
 	@echo "KDP Pipeline Commands:"
 	@echo "  make dashboard                      - Start the web dashboard UI on localhost:8000"
+	@echo "  make storefront                     - Load env, print storefront checks, then start dashboard"
+	@echo "  make storefront-check               - Print storefront checks only (no server start)"
+	@echo "  make storefront-send-test EMAIL=...  - Send a real test email to verify delivery"
 	@echo "  make generate BOOK=book-name        - Generate images for a book"
 	@echo "  make generate-dry BOOK=book-name    - Preview prompts for a book without calling Gemini API"
 	@echo "  make assemble BOOK=book-name        - Assemble PDF for a book"
-	@echo "  make niche-research CSV=...         - Run niche research script (via CLI)"
 	@echo ""
 	@echo "Examples:"
 	@echo "  make generate BOOK=book2-modern-anime"
@@ -15,12 +17,22 @@ help:
 dashboard:
 	@set -a && . .env.local && set +a && python3 dashboard/app.py
 
-niche-research:
-	@if [ -z "$(CSV)" ] || [ -z "$(NICHE)" ]; then \
-		echo "Error: Usage: make niche-research CSV=path/to/data.csv NICHE='book topic'"; \
+storefront:
+	@set -a; [ -f .env.local ] && . .env.local || true; set +a; \
+	python3 scripts/storefront_doctor.py; \
+	python3 dashboard/app.py
+
+storefront-check:
+	@set -a; [ -f .env.local ] && . .env.local || true; set +a; \
+	python3 scripts/storefront_doctor.py
+
+storefront-send-test:
+	@if [ -z "$(EMAIL)" ]; then \
+		echo "Error: EMAIL is required. Usage: make storefront-send-test EMAIL=you@example.com"; \
 		exit 1; \
 	fi
-	@set -a && . .env.local && set +a && python3 pipeline/niche_research.py --csv "$(CSV)" --niche "$(NICHE)"
+	@set -a; [ -f .env.local ] && . .env.local || true; set +a; \
+	python3 scripts/storefront_send_test.py "$(EMAIL)"
 
 generate:
 	@if [ -z "$(BOOK)" ]; then \

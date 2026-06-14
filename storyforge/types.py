@@ -7,6 +7,7 @@ class Variable:
     label: str
     type: str  # "text" | "select"
     options: list[str] = field(default_factory=list)
+    default: str | None = None
 
 
 @dataclass

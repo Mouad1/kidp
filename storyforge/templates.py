@@ -24,6 +24,7 @@ def parse_template(data: dict, slug: str = "") -> Template:
                 label=v.get("label", v["key"]),
                 type=v.get("type", "text"),
                 options=list(v.get("options", [])),
+                default=v.get("default"),
             )
             for v in data.get("variables", [])
         ]

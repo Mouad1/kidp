@@ -14,7 +14,8 @@ class CheckoutSession:
 
 class PaymentProvider(Protocol):
     def create_checkout(self, amount: int, currency: str, reference: str,
-                        success_url: str = "", cancel_url: str = "") -> CheckoutSession: ...
+                        success_url: str = "", cancel_url: str = "",
+                        customer_email: str = "") -> CheckoutSession: ...
 
 
 class StubPaymentProvider:
@@ -35,10 +36,12 @@ class StripePaymentProvider:
         self.secret_key = secret_key
 
     def create_checkout(self, amount: int, currency: str, reference: str,
-                        success_url: str = "", cancel_url: str = "") -> CheckoutSession:
+                        success_url: str = "", cancel_url: str = "",
+                        customer_email: str = "") -> CheckoutSession:
         import stripe
         stripe.api_key = self.secret_key
-        session = stripe.checkout.Session.create(
+        stripe.api_version = "2026-05-27.dahlia"
+        params: dict = dict(
             mode="payment",
             client_reference_id=reference,
             line_items=[{
@@ -52,6 +55,9 @@ class StripePaymentProvider:
             success_url=success_url,
             cancel_url=cancel_url,
         )
+        if customer_email:
+            params["customer_email"] = customer_email
+        session = stripe.checkout.Session.create(**params)
         return CheckoutSession(
             reference=reference, amount=amount, currency=currency,
             status="pending", url=session.url,

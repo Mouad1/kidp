@@ -33,6 +33,7 @@ from pipeline.config_io import read_config, write_config
 from pipeline.prompt import STYLE_TAGS, POSE_TAGS, ELEMENT_TAGS, THEME_TAGS, GROUP_DYNAMICS
 
 from storyforge.templates import list_templates as _sf_list_templates, load_template as _sf_load_template
+from storyforge.errors import TemplateError as _SfTemplateError
 from storyforge.identity import build_hero as _sf_build_hero, save_sheet as _sf_save_sheet, load_sheet as _sf_load_sheet
 from storyforge.engine import resolve as _sf_resolve
 from storyforge.generator import generate_page as _sf_generate_page
@@ -1346,7 +1347,8 @@ def _store_code_sender():
 
 
 def _store_catalog_names() -> list[str]:
-    return _list_books()
+    available = {tpl.slug for tpl in _sf_list_templates()}
+    return [name for name in _list_books() if name in available]
 
 
 def _store_read_config(name: str) -> dict:
@@ -1447,7 +1449,10 @@ async def store_preview(slug: str,
                 raise HTTPException(status_code=400, detail="Photo 2 too large (max 12 MB).")
             photos.append(_normalize_photo_to_png(raw2))
 
-    tpl = _sf_load_template(slug)
+    try:
+        tpl = _sf_load_template(slug)
+    except _SfTemplateError:
+        raise HTTPException(status_code=404, detail="Book template not found.")
 
     import asyncio
     import base64
@@ -1483,6 +1488,22 @@ async def store_preview(slug: str,
         raise HTTPException(status_code=502, detail=f"Preview generation failed: {exc}")
 
     return JSONResponse(result)
+
+
+@app.get("/store/success", response_class=HTMLResponse)
+def store_success(request: Request, reference: str = ""):
+    """Post-payment success page. Validates order status from DB and shows confirmation."""
+    order: dict | None = None
+    if reference:
+        try:
+            db = _store_db()
+            order = _sf_get_order(db, reference)
+        except Exception:
+            pass
+    return templates.TemplateResponse(
+        request=request, name="store_success.html",
+        context={"order": order},
+    )
 
 
 @app.get("/store/{slug}", response_class=HTMLResponse)
@@ -1586,20 +1607,65 @@ async def store_checkout(slug: str, request: Request):
     })
 
 
-@app.get("/store/success", response_class=HTMLResponse)
-def store_success(request: Request, reference: str = ""):
-    """Post-payment success page. Validates order status from DB and shows confirmation."""
-    order: dict | None = None
-    if reference:
-        try:
-            db = _store_db()
-            order = _sf_get_order(db, reference)
-        except Exception:
-            pass
-    return templates.TemplateResponse(
-        request=request, name="store_success.html",
-        context={"order": order},
+@app.post("/store/{slug}/pay")
+async def store_pay(slug: str, request: Request,
+                    child_name: str = Form(...),
+                    photo: UploadFile = File(...)):
+    """Single-step: create order + Stripe Checkout Session, return redirect URL."""
+    if not re.match(r'^[a-z0-9][a-z0-9-]*[a-z0-9]$', slug):
+        raise HTTPException(status_code=400, detail="Invalid book name")
+    session = _require_session(request)
+    if session is None:
+        raise HTTPException(status_code=401, detail="Sign in to continue.")
+    child = (child_name or "").strip()
+    if not child:
+        raise HTTPException(status_code=400, detail="Child name is required.")
+    try:
+        cfg = _store_read_config(slug)
+    except FileNotFoundError:
+        raise HTTPException(status_code=404, detail="Book not found.")
+    if not cfg.get("published"):
+        raise HTTPException(status_code=404, detail="Book not found.")
+
+    data = await photo.read()
+    if not data:
+        raise HTTPException(status_code=400, detail="Empty photo.")
+    if len(data) > 12 * 1024 * 1024:
+        raise HTTPException(status_code=400, detail="Photo too large (max 12 MB).")
+    png_data = _normalize_photo_to_png(data)
+
+    page_count = len(cfg.get("pages", []))
+    quote = _store_price_quote(page_count)
+    amount_cents = int(round(quote["price"] * 100))
+
+    db = _store_db()
+    reference = _sf_new_reference(slug)
+    order_dir = ROOT / ".storefront" / "orders" / reference
+    order_dir.mkdir(parents=True, exist_ok=True)
+    photo_path = order_dir / "photo.png"
+    photo_path.write_bytes(png_data)
+
+    _sf_create_order(
+        db, reference=reference, slug=slug, email=session["email"],
+        child_name=child, photo_path=str(photo_path), page_count=page_count,
+        amount_cents=amount_cents, currency=quote["currency"], now=_dt.datetime.utcnow(),
     )
+
+    base = str(request.base_url).rstrip("/")
+    provider = _sf_get_payment_provider(_load_storefront_settings())
+    checkout = provider.create_checkout(
+        amount=amount_cents, currency=quote["currency"], reference=reference,
+        success_url=f"{base}/store/success?reference={reference}",
+        cancel_url=f"{base}/store/{slug}",
+        customer_email=session["email"],
+    )
+    if checkout.status == "paid":
+        _sf_set_order_status(db, reference, "paid", now=_dt.datetime.utcnow())
+    return JSONResponse({
+        "reference": checkout.reference,
+        "url": checkout.url,
+        "status": checkout.status,
+    })
 
 
 @app.post("/store/webhook/stripe")

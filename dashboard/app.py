@@ -1506,6 +1506,38 @@ def store_success(request: Request, reference: str = ""):
     )
 
 
+@app.get("/store/{slug}/story-preview", response_class=HTMLResponse)
+def store_story_preview(slug: str, request: Request):
+    if not re.match(r'^[a-z0-9][a-z0-9-]*[a-z0-9]$', slug):
+        raise HTTPException(status_code=400, detail="Invalid book name")
+    try:
+        cfg = _store_read_config(slug)
+    except FileNotFoundError:
+        raise HTTPException(status_code=404, detail="Book not found.")
+    if not cfg.get("published"):
+        raise HTTPException(status_code=404, detail="Book not found.")
+    try:
+        tpl = _sf_load_template(slug)
+    except _SfTemplateError:
+        raise HTTPException(status_code=404, detail="Book template not found.")
+    if not tpl.pages:
+        raise HTTPException(status_code=404, detail="No pages available.")
+    pages = []
+    for i, p in enumerate(tpl.pages):
+        image_filename = f"{slug}_page_{i + 1}.png"
+        image_path = ROOT / "images" / slug / image_filename
+        pages.append({
+            "num": i + 1,
+            "text": p.text,
+            "image_url": f"/images/{slug}/{image_filename}",
+            "has_image": image_path.exists(),
+        })
+    return templates.TemplateResponse(
+        request=request, name="store_story_preview.html",
+        context={"slug": slug, "title": cfg.get("title", slug), "pages": pages},
+    )
+
+
 @app.get("/store/{slug}", response_class=HTMLResponse)
 def store_personalize(slug: str, request: Request):
     if not re.match(r'^[a-z0-9][a-z0-9-]*[a-z0-9]$', slug):

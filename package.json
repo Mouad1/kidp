@@ -1,5 +1,8 @@
 {
   "dependencies": {
     "claude-mem": "^12.4.7"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.60.0"
   }
 }

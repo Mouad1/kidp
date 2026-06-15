@@ -103,3 +103,18 @@ def test_preview_404_missing_template(monkeypatch):
     monkeypatch.setattr(app_module, "_sf_load_template", raise_err)
     r = TestClient(app_module.app).get("/store/my-book/story-preview")
     assert r.status_code == 404
+
+
+def test_language_cookie_persists_to_preview(preview_client):
+    # Select English via the language endpoint.
+    r = preview_client.post("/store/lang", data={"lang": "en", "next": "/store"}, follow_redirects=False)
+    assert r.status_code == 303
+    cookie = r.headers.get("set-cookie", "")
+    assert "sf_lang=en" in cookie
+    assert "Path=/" in cookie
+
+    # Subsequent request to preview uses the cookie language.
+    r = preview_client.get("/store/my-book/story-preview")
+    assert r.status_code == 200
+    assert "Il était une fois" not in r.text
+    assert "Once upon a time" in r.text

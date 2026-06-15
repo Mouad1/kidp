@@ -38,7 +38,7 @@ from storyforge.identity import build_hero as _sf_build_hero, save_sheet as _sf_
 from storyforge.engine import resolve as _sf_resolve
 from storyforge.generator import generate_page as _sf_generate_page
 from storyforge.builder import build_book as _sf_build_book
-from storyforge.i18n import translate_pages as _sf_translate_pages
+from storyforge.i18n import translate_pages as _sf_translate_pages, backfill_missing_translations as _sf_backfill_translations
 from storyforge.expand import expand_narrative as _sf_expand_narrative
 from storyforge.cover import generate_cover as _sf_generate_cover
 
@@ -219,6 +219,7 @@ def _book_status(book_name: str) -> dict:
         "title":          getattr(cfg, "TITLE", book_name),
         "author":         getattr(cfg, "AUTHOR", ""),
         "published":      getattr(cfg, "PUBLISHED", False),
+        "languages":      list(getattr(cfg, "LANGUAGES", [])),
         "total_chars":    len(characters),
         "in_sequence":    len(sequence),
         "present":        len(images_present),
@@ -1172,7 +1173,10 @@ def storyforge_generate(name: str, request: Request, slug: str, title: str,
                         author: str = "", languages: str = "fr", page_count: int = 0):
     if not re.match(r'^[a-z0-9][a-z0-9-]*[a-z0-9]$', name):
         raise HTTPException(status_code=400, detail="Invalid book name")
-    lang_list = [l.strip() for l in languages.split(",") if l.strip()] or ["fr"]
+    # Always generate text for every supported storefront language.
+    lang_list = _sf_i18n.load_supported_languages()
+    if not lang_list:
+        lang_list = ["fr"]
     reserved = ("slug", "title", "author", "languages", "page_count")
     variables = {
         k: v for k, v in request.query_params.items() if k not in reserved
@@ -1425,7 +1429,10 @@ def store_set_language(request: Request, lang: str = Form(...), next: str = Form
     if not next.startswith("/"):
         next = "/store"
     resp = RedirectResponse(url=next, status_code=303)
-    resp.set_cookie("sf_lang", lang, httponly=True, samesite="lax",
+    # Clear any old cookie that was set with the default path /store/lang,
+    # then set the new cookie at root path so all storefront routes see it.
+    resp.delete_cookie("sf_lang", path="/store/lang")
+    resp.set_cookie("sf_lang", lang, path="/", httponly=True, samesite="lax",
                     secure=_store_https(), max_age=86400 * 365)
     return resp
 
@@ -1434,12 +1441,11 @@ def store_set_language(request: Request, lang: str = Form(...), next: str = Form
 def store_catalog(request: Request):
     lang = _sf_i18n.resolve_language(request)
     entries = _sf_list_catalog(_store_catalog_names(), _store_read_config)
+    supported = _sf_i18n.load_supported_languages()
     view = []
     for e in entries:
         cfg = _store_read_config(e.slug)
         book_languages = cfg.get("languages") or ["fr"]
-        if lang not in book_languages:
-            continue
         quote = _store_price_quote(e.page_count)
         cover_url = f"/images/{e.slug}/{e.slug}_page_1.png"
         view.append({
@@ -1449,6 +1455,7 @@ def store_catalog(request: Request):
             "category": e.category,
             "price_display": quote["display"],
             "languages": book_languages,
+            "all_languages": supported,
             "intro_text": cfg.get("intro_text", ""),
             "cover_url": cover_url,
         })
@@ -2034,6 +2041,41 @@ def storyforge_publish(name: str, published: bool = True):
     return {"name": name, "published": published}
 
 
+@app.post("/api/storyforge/{name}/translate")
+def storyforge_translate(name: str, request: Request):
+    """Backfill missing translations for an existing book.
+
+    Protected by admin auth. Streams progress messages as SSE.
+    """
+    if _require_admin(request) is None:
+        raise HTTPException(status_code=401, detail="Admin authentication required.")
+    if not re.match(r'^[a-z0-9][a-z0-9-]*[a-z0-9]$', name):
+        raise HTTPException(status_code=400, detail="Invalid book name")
+
+    def stream():
+        try:
+            added = _sf_backfill_translations(
+                name,
+                read_config,
+                write_config,
+                _sf_load_template,
+                _translate_provider,
+                _sf_i18n.load_supported_languages(),
+            )
+            if added:
+                yield f"data: Added translations for: {', '.join(added)}\n\n"
+            else:
+                yield "data: All supported languages already present.\n\n"
+            yield "data: [DONE]\n\n"
+        except Exception as exc:
+            yield f"data: ERROR: {exc}\n\n"
+
+    return StreamingResponse(
+        stream(), media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+    )
+
+
 @app.get("/admin/stories", response_class=HTMLResponse)
 def admin_stories(request: Request):
     if _require_admin(request) is None:
@@ -2043,8 +2085,11 @@ def admin_stories(request: Request):
     for o in all_orders:
         order_counts[o["slug"]] = order_counts.get(o["slug"], 0) + 1
     entries = []
+    supported = _sf_i18n.load_supported_languages()
     for name in _list_books():
         status = _book_status(name)
+        book_langs = set(status.get("languages", []))
+        missing = [lang for lang in supported if lang not in book_langs]
         entries.append({
             "slug":        name,
             "title":       status.get("title", name),
@@ -2052,9 +2097,12 @@ def admin_stories(request: Request):
             "page_count":  status.get("in_sequence", 0),
             "order_count": order_counts.get(name, 0),
             "published":   status.get("published", False),
+            "languages":   sorted(book_langs),
+            "missing":     missing,
         })
     return templates.TemplateResponse(
-        request=request, name="admin_stories.html", context={"entries": entries},
+        request=request, name="admin_stories.html",
+        context={"entries": entries, "supported_languages": supported},
     )
 
 

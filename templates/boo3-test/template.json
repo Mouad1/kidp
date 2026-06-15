@@ -1,0 +1,111 @@
+{
+  "name": "Baba Inouva & Joudia",
+  "mode": "color",
+  "language_default": "fr",
+  "art_style": "textured gouache and watercolor children's book illustration, warm earthy Amazigh palette, Atlas Mountains setting, soft tactile paper texture, semi-realistic characters, atmospheric depth, cozy quality",
+  "variables": [
+    { "key": "HERO_NAME", "label": "Child's name", "type": "text", "default": "Joudia" }
+  ],
+  "pages": [
+    {
+      "beat": "intro",
+      "text": "Très haut, là où les montagnes touchent les nuages, vivait une petite fille nommée {HERO_NAME}. Sa maison était faite de terre chaude et de bois odorant. C'était le plus bel endroit du monde.",
+      "image_prompt": "{HERO} standing at the edge of a traditional Amazigh mountain village perched on a sun-drenched rocky slope in the Atlas Mountains. Terracotta and ocher adobe houses, azure sky, sweeping mountain backdrop. Soft morning light, textured watercolor style."
+    },
+    {
+      "beat": "family",
+      "text": "{HERO_NAME} n'était pas une petite fille comme les autres. Elle était le cœur de sa maison. Elle veillait avec amour sur ses deux petits frères.",
+      "image_prompt": "{HERO} sitting on a patterned Moroccan rug inside a cozy Amazigh home, warmly hugging two laughing young boys. An elderly man with a white beard and brown djellaba watches from the background with a kind smile. Soft warm interior light."
+    },
+    {
+      "beat": "morning",
+      "text": "Chaque matin, avant même que le soleil ne se lève derrière les sommets, {HERO_NAME} ouvrait les yeux. Elle préparait un thé à la menthe qui sentait bon le jardin.",
+      "image_prompt": "{HERO} carefully pouring hot water into a traditional teapot in a rustic Amazigh kitchen. First warm rays of orange and pink light peak over snowy mountain peaks through the window. Soft morning ambiance, textured watercolor."
+    },
+    {
+      "beat": "shepherd",
+      "text": "Avec son bâton, {HERO_NAME} emmenait ses moutons laineux dans la prairie verte. Elle connaissait chaque fleur, chaque caillou et chaque secret du chemin.",
+      "image_prompt": "{HERO} leading a small flock of fluffy sheep across a lush green mountain meadow, holding a wooden staff. Rolling terraced fields and distant Atlas Mountains in the background. Vibrant gouache landscape, soft and poetic."
+    },
+    {
+      "beat": "woodgathering",
+      "text": "Dans la forêt, elle ramassait du bois sec pour le feu du soir. C'était un travail difficile, mais {HERO_NAME} chantait une douce chanson pour se donner de la force.",
+      "image_prompt": "{HERO} bent over carefully gathering a large bundle of dry firewood in a dense mossy mountain forest. Sunbeams filter through the canopy. Expression focused and determined. Tactile paper texture, textured gouache style."
+    },
+    {
+      "beat": "danger_introduced",
+      "text": "Mais attention ! Un secret se cachait dans la forêt sombre. Un monstre de l'ombre, très malin, attendait que la lumière disparaisse pour sortir et tromper les villageois.",
+      "image_prompt": "A cryptic dark shadow figure with glowing amber eyes partially concealed behind a massive tree trunk in a deep shadowed mountain forest. Exaggerated creepy branch shadows. Mystical mood, not terrifying. Textured watercolor, dark violet and indigo tones."
+    },
+    {
+      "beat": "father_worried",
+      "text": "Baba Inouva, le vieux papa de {HERO_NAME}, s'inquiétait. Le monstre savait imiter les voix des mamans pour que les enfants lui ouvrent la porte !",
+      "image_prompt": "{HERO} listening intently with wide eyes as an elderly man with a white beard and brown djellaba sits near a rustic carved wooden door, holding a lantern, speaking with a worried but gentle expression. Warm candle-lit interior."
+    },
+    {
+      "beat": "secret_plan",
+      "text": "Un soir, le vieux papa appela {HERO_NAME}. « Ma fille, nous avons besoin d'un secret pour nous reconnaître. Un code que seul nous deux connaissons. »",
+      "image_prompt": "{HERO} and an elderly man with a white beard holding hands in a cozy candle-lit Amazigh home. He whispers in her ear. Heavy traditional silver bracelets lie on a patterned Moroccan rug beside them, highlighting the upcoming gift. Intimate and warm."
+    },
+    {
+      "beat": "silver_bracelets",
+      "text": "Il lui offrit de lourds bracelets en argent. « Quand tu frapperas à la porte le soir, fais-les sonner très fort. Ce sera notre chant d'argent. »",
+      "image_prompt": "Close-up of elderly hands gently clasping ornate traditional Amazigh silver bracelets onto {HERO}'s wrist. The silver shines under warm lamplight. Intricate traditional engravings visible. Textured gouache, detailed and intimate."
+    },
+    {
+      "beat": "practice",
+      "text": "{HERO_NAME} s'entraîna. Gling ! Gling ! Gling ! Le son était joyeux et brillant. Le vieux papa sourit : « C'est parfait ! Maintenant, je saurai que c'est toi. »",
+      "image_prompt": "{HERO} happily shaking her wrists making silver bracelets tinkle, glowing abstract musical notes 'Gling Gling' floating around her hands. An elderly man with white beard laughing warmly in the background. Playful textured watercolor."
+    },
+    {
+      "beat": "lost_in_work",
+      "text": "Un jour, {HERO_NAME} trouva un endroit rempli de bois sec très loin du village. Elle travailla si dur qu'elle ne vit pas le temps passer.",
+      "image_prompt": "{HERO} struggling to carry an oversized bundle of firewood in distant mountains far from the village. The sun is low and orange on the horizon showing she is very late. Sun-drenched textured gouache landscape."
+    },
+    {
+      "beat": "bracelets_stolen",
+      "text": "Le soleil disparut. Soudain, des ombres furtives apparurent. Ils effrayèrent {HERO_NAME} et lui dérobèrent ses beaux bracelets en argent !",
+      "image_prompt": "{HERO} frightened and running away, bare wrists noticeably empty. A dark shadowy figure with glowing eyes retreating with shiny silver bracelets in its grasp. Dark violet sky, dramatic shadows. Textured watercolor, tense atmosphere."
+    },
+    {
+      "beat": "running_home",
+      "text": "Sans ses bijoux, {HERO_NAME} avait peur de ne pas être reconnue. Mais elle pensa à son papa et à ses frères qui l'attendaient. Elle se mit à courir très vite vers la maison.",
+      "image_prompt": "{HERO} running urgently down a dark winding mountain path, bare wrists, determined but scared expression. Moonlight barely illuminates the way. Encroaching forest shadows. Fast-paced dynamic textured watercolor."
+    },
+    {
+      "beat": "monster_lurks",
+      "text": "Pendant ce temps, près du village, le monstre malin rôdait. Il imitait de douces voix pour tromper les villageois.",
+      "image_prompt": "A stealthy dark shadow monster hiding behind an adobe Amazigh house at night, mimicking a gentle posture with abstract glowing ripple sound waves. The peaceful village unaware. Stealthy dark textured watercolor, navy and indigo tones."
+    },
+    {
+      "beat": "knocking",
+      "text": "{HERO_NAME} arriva enfin, essoufflée. La porte était fermée. Elle frappa de toutes ses forces. « Papa, c'est moi ! Ouvre-moi vite ! La nuit tombe ! »",
+      "image_prompt": "{HERO} distressed, urgently knocking on a large weather-carved wooden door of a rustic mud-brick Amazigh house. Twilight, dark blue-grey shadows. Bare wrists pressed against the rough wood. Textured watercolor, emotional tension."
+    },
+    {
+      "beat": "father_hesitates",
+      "text": "De l'autre côté, le vieux papa entendit la voix... mais où était le chant de l'argent ? Il craignait que ce soit un tour du monstre.",
+      "image_prompt": "An elderly man with white beard and brown djellaba standing behind a heavy carved wooden door, hand hovering over the lock, conflicted and worried expression, listening carefully. Single lantern casting soft flickering light. Tense indoor watercolor."
+    },
+    {
+      "beat": "silence",
+      "text": "« Fais sonner tes bracelets pour me prouver que c'est toi ! » dit le père. {HERO_NAME} pleura : « Je ne peux pas, papa ! On me les a volés ! »",
+      "image_prompt": "Split view: inside the carved wooden door an elderly man distressed, and outside {HERO}'s face looking up at the door crack with tears welling. Her bare wrists pressed against the rough wood emphasizing the missing bracelets. Textured gouache close-up."
+    },
+    {
+      "beat": "father_torn",
+      "text": "Baba Inouva était perdu. S'il n'ouvrait pas, {HERO_NAME} resterait dehors dans le froid. S'il ouvrait au monstre, ses enfants seraient en danger.",
+      "image_prompt": "An elderly man with white beard and brown djellaba kneeling against the wooden door with head in his hands, conflicted. Two small boys sleeping peacefully on mats in background shadows. Single lantern with flickering warm light. Anxious but cozy textured watercolor."
+    },
+    {
+      "beat": "revelation",
+      "text": "Soudain, Baba Inouva comprit quelque chose d'important. Les bracelets n'étaient que du métal. Il chercha dans son cœur quelque chose de vrai que seul lui et {HERO_NAME} savaient.",
+      "image_prompt": "An elderly man with white beard kneeling against the wooden door inside a warm Amazigh home. Soft warm light radiates from his chest highlighting his kind face. Focused and no longer confused. Gentle and intimate textured gouache illustration."
+    },
+    {
+      "beat": "resolution",
+      "text": "Il murmura : « Dis-moi, {HERO_NAME}... quel est le petit nom doux que je te donne quand je te borde le soir ? » Elle répondit, et la porte s'ouvrit. L'amour véritable ne peut pas être imité.",
+      "image_prompt": "{HERO} and an elderly man with a white beard embracing warmly in the open doorway of an Amazigh home. The night sky is deep blue and filled with bright stars. Warm golden light spills from inside. Tears of joy and relief. Heartwarming textured watercolor finale."
+    }
+  ]
+}

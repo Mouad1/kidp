@@ -1,19 +1,25 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="{{ lang }}">
 
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Order confirmed · StoryForge</title>
+  <title>{{ i18n.site_name }} · {{ i18n.success_title_default }}</title>
   <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    body { font-family: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, sans-serif; }
+  </style>
 </head>
 
-<body class="bg-gray-50 text-gray-900 min-h-screen">
+<body class="bg-stone-50 text-stone-900 min-h-screen" dir="{% if lang == 'ar' %}rtl{% else %}ltr{% endif %}">
 
-  <header class="bg-white border-b border-gray-200 px-6 py-4">
-    <div class="max-w-3xl mx-auto flex items-center gap-3">
+  <header class="bg-white/80 backdrop-blur border-b border-stone-200 sticky top-0 z-30">
+    <div class="max-w-3xl mx-auto px-6 py-4 flex items-center gap-3">
       <span class="text-2xl">✨</span>
-      <h1 class="text-lg font-bold">StoryForge</h1>
+      <h1 class="text-lg font-bold tracking-tight">{{ i18n.site_name }}</h1>
     </div>
   </header>
 
@@ -22,28 +28,27 @@
     {% if order and order.status == "paid" %}
 
     <div class="text-6xl mb-6">🎉</div>
-    <h2 class="text-3xl font-bold mb-3">Your book is on its way!</h2>
-    <p class="text-gray-500 text-lg mb-8">
-      We received your order for <strong>{{ order.child_name }}</strong>.
-      Check <strong>{{ order.email }}</strong> for a confirmation.
+    <h2 class="text-3xl font-bold mb-3">{{ i18n.success_title_paid }}</h2>
+    <p class="text-stone-500 text-lg mb-8">
+      {{ i18n.success_desc_paid.format(child_name=order.child_name, email=order.email) | safe }}
     </p>
 
-    <div class="inline-block text-left bg-white rounded-xl border border-gray-200 px-8 py-6 mb-8">
+    <div class="inline-block text-left bg-white rounded-2xl border border-stone-200 px-8 py-6 mb-8 shadow-sm">
       <dl class="space-y-3 text-sm">
         <div class="flex gap-8">
-          <dt class="w-32 text-gray-400 font-medium">Reference</dt>
+          <dt class="w-32 text-stone-400 font-medium">{{ i18n.reference }}</dt>
           <dd class="font-mono">{{ order.reference }}</dd>
         </div>
         <div class="flex gap-8">
-          <dt class="w-32 text-gray-400 font-medium">Book</dt>
+          <dt class="w-32 text-stone-400 font-medium">{{ i18n.book }}</dt>
           <dd>{{ order.slug }}</dd>
         </div>
         <div class="flex gap-8">
-          <dt class="w-32 text-gray-400 font-medium">Amount</dt>
+          <dt class="w-32 text-stone-400 font-medium">{{ i18n.amount }}</dt>
           <dd>${{ "%.2f"|format(order.amount_cents / 100) }} {{ order.currency }}</dd>
         </div>
         <div class="flex gap-8">
-          <dt class="w-32 text-gray-400 font-medium">Status</dt>
+          <dt class="w-32 text-stone-400 font-medium">{{ i18n.status }}</dt>
           <dd>
             <span class="inline-block px-2 py-0.5 rounded-full text-xs font-semibold bg-emerald-100 text-emerald-700">
               {{ order.status | capitalize }}
@@ -53,28 +58,27 @@
       </dl>
     </div>
 
-    <p class="text-sm text-gray-400">
-      We will personally craft your personalized book and send it to you by email within 48 hours.
+    <p class="text-sm text-stone-400">
+      {{ i18n.crafting_notice }}
     </p>
 
     {% elif order %}
 
     <div class="text-5xl mb-6">⏳</div>
-    <h2 class="text-2xl font-bold mb-3">Payment processing</h2>
-    <p class="text-gray-500 mb-6">
-      Your order <span class="font-mono">{{ order.reference }}</span> is being confirmed.
-      This usually takes a few seconds. Check your email for a confirmation.
+    <h2 class="text-2xl font-bold mb-3">{{ i18n.success_title_pending }}</h2>
+    <p class="text-stone-500 mb-6">
+      {{ i18n.success_desc_default }}
     </p>
-    <a href="/store" class="text-sm text-purple-600 hover:underline">← Back to store</a>
+    <a href="/store?lang={{ lang }}" class="text-sm text-purple-600 hover:underline">{{ i18n.back_to_store }}</a>
 
     {% else %}
 
     <div class="text-5xl mb-6">✅</div>
-    <h2 class="text-2xl font-bold mb-3">Thank you for your order!</h2>
-    <p class="text-gray-500 mb-6">
-      You'll receive a confirmation by email shortly.
+    <h2 class="text-2xl font-bold mb-3">{{ i18n.success_title_default }}</h2>
+    <p class="text-stone-500 mb-6">
+      {{ i18n.success_desc_default }}
     </p>
-    <a href="/store" class="text-sm text-purple-600 hover:underline">← Back to store</a>
+    <a href="/store?lang={{ lang }}" class="text-sm text-purple-600 hover:underline">{{ i18n.back_to_store }}</a>
 
     {% endif %}
 

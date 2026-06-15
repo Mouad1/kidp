@@ -24,6 +24,10 @@ def fake_backend(monkeypatch):
     fake = FakeImageGenerator()
     monkeypatch.setattr(appmod, "_backend_provider", lambda: fake)
     monkeypatch.setattr(appmod, "_analyze_provider", lambda photos: "boy, 7, curly hair")
+    monkeypatch.setattr(
+        appmod, "_translate_provider",
+        lambda text, langs: {lang: f"{lang}:{text}" for lang in langs},
+    )
     yield fake
 
 
@@ -114,12 +118,8 @@ def test_pricing_endpoint_rejects_unknown_paper():
     assert r.status_code == 400
 
 
-def test_generate_with_languages_and_cover(cleanup, fake_backend, monkeypatch):
+def test_generate_with_languages_and_cover(cleanup, fake_backend):
     name = cleanup
-    monkeypatch.setattr(
-        appmod, "_translate_provider",
-        lambda text, langs: {lang: f"{lang}:{text}" for lang in langs},
-    )
     png = _image_bytes("PNG")
     client.post(f"/api/storyforge/{name}/photos",
                 files=[("photos", ("a.png", io.BytesIO(png), "image/png"))])
@@ -131,7 +131,6 @@ def test_generate_with_languages_and_cover(cleanup, fake_backend, monkeypatch):
             "slug": "brave-little-explorer",
             "title": "Sami's Adventure",
             "author": "Tester",
-            "languages": "en,fr",
             "HERO_NAME": "Sami",
             "SETTING": "enchanted forest",
             "VALUE": "courage",
@@ -143,11 +142,12 @@ def test_generate_with_languages_and_cover(cleanup, fake_backend, monkeypatch):
 
     from pipeline.config_io import read_config
     cfg = read_config(name)
-    assert cfg["languages"] == ["en", "fr"]
+    assert set(cfg["languages"]) == {"fr", "en", "es", "ar"}
     assert cfg["pages"][0]["text"]["fr"]  # source language keeps original
     assert not cfg["pages"][0]["text"]["fr"].startswith("en:")
     assert cfg["pages"][0]["text"]["en"].startswith("en:")
-    assert cfg["pages"][0]["text"]["es"] == ""
+    assert cfg["pages"][0]["text"]["es"].startswith("es:")
+    assert cfg["pages"][0]["text"]["ar"].startswith("ar:")
 
     cover = client.get(f"/api/storyforge/{name}/cover")
     assert cover.status_code == 200

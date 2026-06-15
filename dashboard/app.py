@@ -38,7 +38,7 @@ from storyforge.identity import build_hero as _sf_build_hero, save_sheet as _sf_
 from storyforge.engine import resolve as _sf_resolve
 from storyforge.generator import generate_page as _sf_generate_page
 from storyforge.builder import build_book as _sf_build_book
-from storyforge.i18n import translate_pages as _sf_translate_pages
+from storyforge.i18n import translate_pages as _sf_translate_pages, backfill_missing_translations as _sf_backfill_translations
 from storyforge.expand import expand_narrative as _sf_expand_narrative
 from storyforge.cover import generate_cover as _sf_generate_cover
 
@@ -58,6 +58,7 @@ from storefront.db import (
     set_order_notes as _sf_set_order_notes, get_stats as _sf_get_stats,
 )
 from storefront.admin import seed_admins as _sf_seed_admins, is_admin as _sf_is_admin
+from storefront import i18n as _sf_i18n
 
 ROOT = pathlib.Path(__file__).parent.parent
 sys.path.insert(0, str(ROOT))
@@ -218,6 +219,7 @@ def _book_status(book_name: str) -> dict:
         "title":          getattr(cfg, "TITLE", book_name),
         "author":         getattr(cfg, "AUTHOR", ""),
         "published":      getattr(cfg, "PUBLISHED", False),
+        "languages":      list(getattr(cfg, "LANGUAGES", [])),
         "total_chars":    len(characters),
         "in_sequence":    len(sequence),
         "present":        len(images_present),
@@ -1171,7 +1173,10 @@ def storyforge_generate(name: str, request: Request, slug: str, title: str,
                         author: str = "", languages: str = "fr", page_count: int = 0):
     if not re.match(r'^[a-z0-9][a-z0-9-]*[a-z0-9]$', name):
         raise HTTPException(status_code=400, detail="Invalid book name")
-    lang_list = [l.strip() for l in languages.split(",") if l.strip()] or ["fr"]
+    # Always generate text for every supported storefront language.
+    lang_list = _sf_i18n.load_supported_languages()
+    if not lang_list:
+        lang_list = ["fr"]
     reserved = ("slug", "title", "author", "languages", "page_count")
     variables = {
         k: v for k, v in request.query_params.items() if k not in reserved
@@ -1355,6 +1360,57 @@ def _store_read_config(name: str) -> dict:
     return read_config(name)
 
 
+def _store_template_context(request: Request, **extra) -> dict:
+    """Common template context for all storefront pages."""
+    lang = _sf_i18n.resolve_language(request)
+    return {
+        "lang": lang,
+        "i18n": _sf_i18n.get_strings(lang),
+        "language_name": _sf_i18n.language_name,
+        "supported_languages": _sf_i18n.load_supported_languages(),
+        **extra,
+    }
+
+
+def _store_default_hero_name(tpl) -> str | None:
+    """Return the default hero name declared in a template, if any."""
+    for v in tpl.variables:
+        if v.key == "HERO_NAME" and v.default:
+            return v.default
+    return None
+
+
+def _store_resolve_page_text(cfg: dict, tpl, page_index: int, lang: str,
+                             default_name: str | None) -> str:
+    """Return the best available page text for the requested language.
+
+    Priority:
+    1. Book config ``pages[page_index]["text"][lang]``.
+    2. Book config ``pages[page_index]["text"][tpl.language_default]``.
+    3. Template pages[page_index].text with ``{HERO_NAME}`` replaced by
+       ``default_name`` when available.
+    """
+    text = ""
+    pages = cfg.get("pages", [])
+    if page_index < len(pages):
+        texts = pages[page_index].get("text") or {}
+        if isinstance(texts, dict):
+            if lang in texts and texts[lang]:
+                text = texts[lang]
+            elif tpl.language_default in texts and texts[tpl.language_default]:
+                text = texts[tpl.language_default]
+            else:
+                for value in texts.values():
+                    if value:
+                        text = value
+                        break
+    if not text and page_index < len(tpl.pages):
+        text = tpl.pages[page_index].text
+    if default_name:
+        text = text.replace("{HERO_NAME}", default_name)
+    return text
+
+
 def _require_session(request: Request) -> dict | None:
     token = request.cookies.get("sf_session")
     if not token:
@@ -1363,22 +1419,49 @@ def _require_session(request: Request) -> dict | None:
                               max_age=_SF_SESSION_MAX_AGE, now=_dt.datetime.utcnow())
 
 
+@app.post("/store/lang")
+def store_set_language(request: Request, lang: str = Form(...), next: str = Form("/store")):
+    """Persist storefront language in a cookie and redirect back."""
+    supported = _sf_i18n.load_supported_languages()
+    if lang not in supported:
+        lang = _sf_i18n.DEFAULT_LANGUAGE
+    # Sanitize redirect target to local paths only.
+    if not next.startswith("/"):
+        next = "/store"
+    resp = RedirectResponse(url=next, status_code=303)
+    # Clear any old cookie that was set with the default path /store/lang,
+    # then set the new cookie at root path so all storefront routes see it.
+    resp.delete_cookie("sf_lang", path="/store/lang")
+    resp.set_cookie("sf_lang", lang, path="/", httponly=True, samesite="lax",
+                    secure=_store_https(), max_age=86400 * 365)
+    return resp
+
+
 @app.get("/store", response_class=HTMLResponse)
 def store_catalog(request: Request):
+    lang = _sf_i18n.resolve_language(request)
     entries = _sf_list_catalog(_store_catalog_names(), _store_read_config)
+    supported = _sf_i18n.load_supported_languages()
     view = []
     for e in entries:
+        cfg = _store_read_config(e.slug)
+        book_languages = cfg.get("languages") or ["fr"]
         quote = _store_price_quote(e.page_count)
+        cover_url = f"/images/{e.slug}/{e.slug}_page_1.png"
         view.append({
             "slug": e.slug,
             "title": e.title,
             "page_count": e.page_count,
             "category": e.category,
             "price_display": quote["display"],
+            "languages": book_languages,
+            "all_languages": supported,
+            "intro_text": cfg.get("intro_text", ""),
+            "cover_url": cover_url,
         })
     return templates.TemplateResponse(
         request=request, name="store_catalog.html",
-        context={"entries": view},
+        context=_store_template_context(request, entries=view),
     )
 
 
@@ -1502,7 +1585,48 @@ def store_success(request: Request, reference: str = ""):
             pass
     return templates.TemplateResponse(
         request=request, name="store_success.html",
-        context={"order": order},
+        context=_store_template_context(request, order=order),
+    )
+
+
+@app.get("/store/{slug}/story-preview", response_class=HTMLResponse)
+def store_story_preview(slug: str, request: Request):
+    if not re.match(r'^[a-z0-9][a-z0-9-]*[a-z0-9]$', slug):
+        raise HTTPException(status_code=400, detail="Invalid book name")
+    try:
+        cfg = _store_read_config(slug)
+    except FileNotFoundError:
+        raise HTTPException(status_code=404, detail="Book not found.")
+    if not cfg.get("published"):
+        raise HTTPException(status_code=404, detail="Book not found.")
+    try:
+        tpl = _sf_load_template(slug)
+    except _SfTemplateError:
+        raise HTTPException(status_code=404, detail="Book template not found.")
+    if not tpl.pages:
+        raise HTTPException(status_code=404, detail="No pages available.")
+
+    lang = _sf_i18n.resolve_language(request)
+    default_name = _store_default_hero_name(tpl)
+    pages = []
+    for i, _ in enumerate(tpl.pages):
+        image_filename = f"{slug}_page_{i + 1}.png"
+        image_path = ROOT / "images" / slug / image_filename
+        pages.append({
+            "num": i + 1,
+            "text": _store_resolve_page_text(cfg, tpl, i, lang, default_name),
+            "image_url": f"/images/{slug}/{image_filename}",
+            "has_image": image_path.exists(),
+        })
+    return templates.TemplateResponse(
+        request=request, name="store_story_preview.html",
+        context=_store_template_context(
+            request,
+            slug=slug,
+            title=cfg.get("title", slug),
+            pages=pages,
+            default_name=default_name,
+        ),
     )
 
 
@@ -1520,9 +1644,13 @@ def store_personalize(slug: str, request: Request):
     quote = _store_price_quote(page_count)
     return templates.TemplateResponse(
         request=request, name="store_personalize.html",
-        context={"slug": slug, "title": cfg.get("title", slug),
-                 "page_count": page_count,
-                 "price_display": quote["display"]},
+        context=_store_template_context(
+            request,
+            slug=slug,
+            title=cfg.get("title", slug),
+            page_count=page_count,
+            price_display=quote["display"],
+        ),
     )
 
 
@@ -1913,6 +2041,41 @@ def storyforge_publish(name: str, published: bool = True):
     return {"name": name, "published": published}
 
 
+@app.post("/api/storyforge/{name}/translate")
+def storyforge_translate(name: str, request: Request):
+    """Backfill missing translations for an existing book.
+
+    Protected by admin auth. Streams progress messages as SSE.
+    """
+    if _require_admin(request) is None:
+        raise HTTPException(status_code=401, detail="Admin authentication required.")
+    if not re.match(r'^[a-z0-9][a-z0-9-]*[a-z0-9]$', name):
+        raise HTTPException(status_code=400, detail="Invalid book name")
+
+    def stream():
+        try:
+            added = _sf_backfill_translations(
+                name,
+                read_config,
+                write_config,
+                _sf_load_template,
+                _translate_provider,
+                _sf_i18n.load_supported_languages(),
+            )
+            if added:
+                yield f"data: Added translations for: {', '.join(added)}\n\n"
+            else:
+                yield "data: All supported languages already present.\n\n"
+            yield "data: [DONE]\n\n"
+        except Exception as exc:
+            yield f"data: ERROR: {exc}\n\n"
+
+    return StreamingResponse(
+        stream(), media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+    )
+
+
 @app.get("/admin/stories", response_class=HTMLResponse)
 def admin_stories(request: Request):
     if _require_admin(request) is None:
@@ -1922,8 +2085,11 @@ def admin_stories(request: Request):
     for o in all_orders:
         order_counts[o["slug"]] = order_counts.get(o["slug"], 0) + 1
     entries = []
+    supported = _sf_i18n.load_supported_languages()
     for name in _list_books():
         status = _book_status(name)
+        book_langs = set(status.get("languages", []))
+        missing = [lang for lang in supported if lang not in book_langs]
         entries.append({
             "slug":        name,
             "title":       status.get("title", name),
@@ -1931,9 +2097,12 @@ def admin_stories(request: Request):
             "page_count":  status.get("in_sequence", 0),
             "order_count": order_counts.get(name, 0),
             "published":   status.get("published", False),
+            "languages":   sorted(book_langs),
+            "missing":     missing,
         })
     return templates.TemplateResponse(
-        request=request, name="admin_stories.html", context={"entries": entries},
+        request=request, name="admin_stories.html",
+        context={"entries": entries, "supported_languages": supported},
     )
 
 

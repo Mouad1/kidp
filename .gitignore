@@ -28,6 +28,15 @@ settings.json
 # Node
 node_modules/
 
+# Claude / IDE tooling
+.agents/
+.augment/
+.claude/
+.kilocode/
+.windsurf/
+skills-lock.json
+skills/
+
 # Large generated images (regenerate with pipeline/generate.py)
 images/
 

@@ -6,6 +6,10 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Stories · Admin</title>
   <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .spin { animation: spin .8s linear infinite; }
+  </style>
 </head>
 
 <body class="bg-gray-50 text-gray-900 min-h-screen">
@@ -48,13 +52,34 @@
           <span class="bg-gray-100 text-gray-600 px-2 py-0.5 rounded-full">{{ e.page_count }} pages</span>
         </div>
 
+        <div class="text-xs">
+          <p class="text-gray-500 mb-1">Langues :</p>
+          <div class="flex flex-wrap gap-1">
+            {% for lang in supported_languages %}
+            <span class="px-1.5 py-0.5 rounded text-xs font-medium border
+              {% if lang in e.languages %}bg-emerald-50 text-emerald-700 border-emerald-200{% else %}bg-gray-50 text-gray-400 border-gray-200{% endif %}">
+              {{ lang | upper }}
+            </span>
+            {% endfor %}
+          </div>
+        </div>
+
         <div class="text-xs text-gray-500">
           📦 <strong>{{ e.order_count }}</strong> commande{{ 's' if e.order_count != 1 else '' }}
         </div>
 
         <div class="text-xs text-gray-400 font-mono">{{ e.slug }}</div>
 
-        <div class="mt-auto pt-2">
+        <div class="mt-auto pt-2 space-y-2">
+          {% if e.missing %}
+          <button
+            onclick="translateBook(this)"
+            class="w-full py-1.5 rounded-lg text-sm font-medium bg-indigo-50 text-indigo-700 hover:bg-indigo-100 transition-colors"
+          >
+            Traduire ({{ e.missing | join(', ') | upper }})
+          </button>
+          <p class="text-red-600 text-xs mt-1 hidden" data-translate-error></p>
+          {% endif %}
           <button
             onclick="togglePublish(this)"
             class="w-full py-1.5 rounded-lg text-sm font-medium transition-colors
@@ -111,6 +136,47 @@
       } finally {
         btn.disabled = false;
       }
+    }
+
+    function translateBook(btn) {
+      const card = btn.closest("[data-slug]");
+      const slug = card.dataset.slug;
+      const errEl = card.querySelector("[data-translate-error]");
+      const origText = btn.textContent.trim();
+
+      btn.disabled = true;
+      btn.innerHTML = '<span class="inline-block w-4 h-4 border-2 border-indigo-700 border-t-transparent rounded-full spin"></span> Traduction...';
+      errEl.classList.add("hidden");
+
+      const es = new EventSource(`/api/storyforge/${slug}/translate`);
+      es.onmessage = (ev) => {
+        if (ev.data === '[DONE]') {
+          es.close();
+          btn.textContent = '✓ Traduit';
+          btn.classList.replace('bg-indigo-50', 'bg-emerald-50');
+          btn.classList.replace('text-indigo-700', 'text-emerald-700');
+          btn.classList.replace('hover:bg-indigo-100', 'hover:bg-emerald-100');
+          // Refresh after a short delay so the user sees updated badges.
+          setTimeout(() => window.location.reload(), 800);
+          return;
+        }
+        if (ev.data.startsWith('ERROR:')) {
+          es.close();
+          btn.disabled = false;
+          btn.textContent = origText;
+          errEl.textContent = ev.data;
+          errEl.classList.remove("hidden");
+          return;
+        }
+        btn.textContent = ev.data;
+      };
+      es.onerror = () => {
+        es.close();
+        btn.disabled = false;
+        btn.textContent = origText;
+        errEl.textContent = "Erreur de connexion.";
+        errEl.classList.remove("hidden");
+      };
     }
   </script>
 </body>

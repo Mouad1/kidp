@@ -67,7 +67,7 @@
       <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
         {% for e in entries %}
         <article class="book-card bg-white rounded-2xl border border-stone-200 overflow-hidden hover:shadow-xl transition-shadow duration-300 flex flex-col">
-          <a href="/store/{{ e.slug }}/story-preview" class="block aspect-[4/3] bg-stone-100 overflow-hidden relative">
+          <a href="/store/{{ e.slug }}/story-preview?lang={{ lang }}" class="block aspect-[4/3] bg-stone-100 overflow-hidden relative">
             <img src="{{ e.cover_url }}" alt="{{ e.title }}"
                  class="book-cover w-full h-full object-cover"
                  onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';" />
@@ -75,7 +75,7 @@
               {{ i18n.preview_btn }}
             </div>
             <span class="absolute top-3 right-3 bg-white/90 backdrop-blur text-stone-700 text-xs font-semibold px-2.5 py-1 rounded-full shadow-sm border border-stone-100">
-              {{ e.languages | join(', ') | upper }}
+              {{ e.all_languages | length }} langues
             </span>
           </a>
 
@@ -83,18 +83,18 @@
             <div class="text-xs font-semibold text-purple-600 uppercase tracking-wider mb-2">{{ e.category }}</div>
             <h3 class="text-xl font-bold text-stone-900 mb-2 leading-tight">{{ e.title }}</h3>
             <p class="text-sm text-stone-500 mb-4 line-clamp-3 flex-1">
-              {{ e.intro_text or i18n.catalog_subtitle }}
+              {{ i18n.catalog_subtitle }}
             </p>
             <div class="flex items-center justify-between mb-5">
               <span class="text-2xl font-bold text-stone-900">{{ e.price_display }}</span>
               <span class="text-sm text-stone-500">{{ i18n.pages_label.format(page_count=e.page_count) }}</span>
             </div>
             <div class="flex gap-3">
-              <a href="/store/{{ e.slug }}/story-preview"
+              <a href="/store/{{ e.slug }}/story-preview?lang={{ lang }}"
                  class="flex-1 text-center text-sm font-semibold text-stone-700 bg-stone-100 border border-stone-200 px-4 py-2.5 rounded-xl hover:bg-stone-200 transition">
                 {{ i18n.preview_btn }}
               </a>
-              <a href="/store/{{ e.slug }}"
+              <a href="/store/{{ e.slug }}?lang={{ lang }}"
                  class="flex-1 text-center text-sm font-semibold text-white bg-purple-600 px-4 py-2.5 rounded-xl hover:bg-purple-700 transition shadow-sm shadow-purple-200">
                 {{ i18n.personalize_btn }}
               </a>

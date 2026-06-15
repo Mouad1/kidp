@@ -69,7 +69,7 @@
     <p class="text-stone-500 mb-6">
       {{ i18n.success_desc_default }}
     </p>
-    <a href="/store" class="text-sm text-purple-600 hover:underline">{{ i18n.back_to_store }}</a>
+    <a href="/store?lang={{ lang }}" class="text-sm text-purple-600 hover:underline">{{ i18n.back_to_store }}</a>
 
     {% else %}
 
@@ -78,7 +78,7 @@
     <p class="text-stone-500 mb-6">
       {{ i18n.success_desc_default }}
     </p>
-    <a href="/store" class="text-sm text-purple-600 hover:underline">{{ i18n.back_to_store }}</a>
+    <a href="/store?lang={{ lang }}" class="text-sm text-purple-600 hover:underline">{{ i18n.back_to_store }}</a>
 
     {% endif %}
 

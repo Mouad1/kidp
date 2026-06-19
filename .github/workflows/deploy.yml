@@ -1,0 +1,65 @@
+name: Deploy StoryForge
+
+on:
+  push:
+    branches: [main]
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push Docker image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          push: true
+          tags: ghcr.io/mouad1/kidp:latest
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Deploy to VPS
+        uses: appleboy/ssh-action@v1
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USER }}
+          key: ${{ secrets.VPS_SSH_KEY }}
+          script: |
+            set -e
+            cd /home/storyforge
+            git pull origin main
+
+            printf 'GEMINI_API_KEY=%s\n' '${{ secrets.GEMINI_API_KEY }}' > .env
+            printf 'STOREFRONT_SESSION_SECRET=%s\n' '${{ secrets.STOREFRONT_SESSION_SECRET }}' >> .env
+            printf 'STOREFRONT_SMTP_HOST=%s\n' '${{ secrets.STOREFRONT_SMTP_HOST }}' >> .env
+            printf 'STOREFRONT_SMTP_PORT=%s\n' '${{ secrets.STOREFRONT_SMTP_PORT }}' >> .env
+            printf 'STOREFRONT_SMTP_USERNAME=%s\n' '${{ secrets.STOREFRONT_SMTP_USERNAME }}' >> .env
+            printf 'STOREFRONT_SMTP_PASSWORD=%s\n' '${{ secrets.STOREFRONT_SMTP_PASSWORD }}' >> .env
+            printf 'STOREFRONT_SMTP_FROM_ADDR=%s\n' '${{ secrets.STOREFRONT_SMTP_FROM_ADDR }}' >> .env
+            printf 'RESEND_API_KEY=%s\n' '${{ secrets.RESEND_API_KEY }}' >> .env
+            printf 'STRIPE_SECRET_KEY=%s\n' '${{ secrets.STRIPE_SECRET_KEY }}' >> .env
+            printf 'STRIPE_WEBHOOK_SECRET=%s\n' '${{ secrets.STRIPE_WEBHOOK_SECRET }}' >> .env
+
+            test -f settings.json || cp settings.example.json settings.json
+
+            sudo cp deploy/nginx.conf /etc/nginx/sites-available/storyforge
+            sudo ln -sf /etc/nginx/sites-available/storyforge /etc/nginx/sites-enabled/storyforge
+            sudo nginx -t
+            sudo nginx -s reload
+
+            docker compose pull
+            docker compose up -d --remove-orphans
+            docker image prune -f

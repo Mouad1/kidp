@@ -1,0 +1,57 @@
+{
+  "name": "Le Petit Coiffeur, la Flûte et le Secret du Roi",
+  "mode": "color",
+  "language_default": "fr",
+  "art_style": "A whimsical children's storybook, vibrant and warm color palette, soft lighting, enchanting atmosphere, detailed illustrations with a touch of magic.",
+  "variables": [
+    {
+      "key": "HERO_NAME",
+      "label": "Prénom de l'enfant",
+      "type": "text",
+      "options": [],
+      "default": null
+    }
+  ],
+  "pages": [
+    {
+      "beat": "Page 1",
+      "text": "Il était une fois un roi très orgueilleux qui cachait un grand secret sous sa couronne : il avait une corne qui poussait sur sa tête. Pour que personne ne découvre son secret, le roi faisait disparaître tous les coiffeurs qui venaient au château. Un jour, ce fut le tour d'un jeune et gentil garçon. Avant son départ, sa maman, qui l'aimait très fort, lui prépara trois délicieux gâteaux pour son voyage.",
+      "image_prompt": "A young boy with bright, curious brown eyes, short messy brown hair, wearing a simple blue tunic and brown trousers, with a kind and determined expression. receiving three delicious cakes from his loving mother, with a grand, imposing castle visible in the background under a bright sky."
+    },
+    {
+      "beat": "Page 2",
+      "text": "Arrivé au château, le petit garçon commença à couper les cheveux du roi. Quand le roi enleva son chapeau, le garçon vit la corne ! Il fut très surpris mais resta très calme et fit semblant de ne rien voir pour se protéger. À la fin, le roi lui dit de prendre des pièces d'or dans un grand coffre en récompense. Mais attention, c'était un piège ! Le roi le poussa, et le garçon tomba tout au fond du coffre, dans une grotte sombre.",
+      "image_prompt": "A young boy with bright, curious brown eyes, short messy brown hair, wearing a simple blue tunic and brown trousers, with a kind and determined expression. falling into a deep, dark chest, with the silhouette of the king looking down from above, a single ray of light illuminating the falling boy."
+    },
+    {
+      "beat": "Page 3",
+      "text": "Dans la grotte obscure, le garçon rencontra un énorme serpent. Au lieu d'avoir peur, il sortit sa petite flûte de bois (un nây) et se mit à jouer. La jolie musique fit danser le serpent de joie ! Le garçon lui offrit alors son premier gâteau. Pour le remercier de ce gentil cadeau, le serpent l'aida à trouver la sortie de la grotte.",
+      "image_prompt": "A young boy with bright, curious brown eyes, short messy brown hair, wearing a simple blue tunic and brown trousers, with a kind and determined expression. playing a small wooden flute for a large, friendly-looking snake, who is dancing joyfully in a dimly lit cave, with A young boy with bright, curious brown eyes, short messy brown hair, wearing a simple blue tunic and brown trousers, with a kind and determined expression. offering a cake."
+    },
+    {
+      "beat": "Page 4",
+      "text": "En sortant, le garçon se retrouva dans une grande forêt et tomba nez à nez avec un loup au ventre qui gargouillait de faim. Le garçon grimpa vite dans un arbre, mais finit par tomber. Heureusement, il sortit son deuxième gâteau et l'offrit au loup. Le loup, ravi d'avoir le ventre plein, devint son ami et le prit sur son dos pour le sortir de la forêt.",
+      "image_prompt": "A young boy with bright, curious brown eyes, short messy brown hair, wearing a simple blue tunic and brown trousers, with a kind and determined expression. riding on the back of a large, friendly wolf through a vibrant, sun-dappled forest, looking happy and adventurous."
+    },
+    {
+      "beat": "Page 5",
+      "text": "Le garçon arriva près d'une petite cabane au bord d'un lac, où vivait une sorcière qui voulait l'enfermer. Le petit garçon lui demanda la permission de jouer de sa flûte une dernière fois. La musique apaisa la sorcière. Il lui donna son tout dernier gâteau et lui raconta son aventure. La sorcière, touchée, devint gentille et lui offrit un vieux manteau magique : s'il le mettait à l'envers, il se transformait en vieux monsieur avec une barbe blanche !",
+      "image_prompt": "A young boy with bright, curious brown eyes, short messy brown hair, wearing a simple blue tunic and brown trousers, with a kind and determined expression. offering his last cake to a kind-looking witch by a serene lake, receiving a shimmering magical cloak, with a small hut in the background."
+    },
+    {
+      "beat": "Page 6",
+      "text": "Le petit garçon eut une idée géniale. Il mit son manteau magique, se transforma en vieil homme aux cheveux blancs, et retourna au château. Devant les gardes, il dit : \"Je viens pour coiffer le roi !\" et on le laissa entrer. Sans être reconnu, il coupa de nouveau les cheveux du roi.",
+      "image_prompt": "A young boy with bright, curious brown eyes, short messy brown hair, wearing a simple blue tunic and brown trousers, with a kind and determined expression. disguised as a wise old man with a long white beard, confidently walking through the grand gates of the castle, past surprised guards."
+    },
+    {
+      "beat": "Page 7",
+      "text": "Comme la première fois, le roi lui dit d'aller prendre de l'or dans le coffre. Mais le garçon était malin. Il cria : \"Oh là là ! Je n'ai jamais vu autant d'or de toute ma vie !\" Le roi, très curieux, se pencha pour regarder dans le coffre. Hop ! Le garçon le poussa dedans !",
+      "image_prompt": "A young boy with bright, curious brown eyes, short messy brown hair, wearing a simple blue tunic and brown trousers, with a kind and determined expression. disguised as an old man, cleverly pushing the curious king, who is leaning over, into the deep, dark gold chest, with a mischievous grin."
+    },
+    {
+      "beat": "Page 8",
+      "text": "Le garçon enleva vite son manteau magique, redevint un petit enfant et s'échappa du château sans que personne ne le voie. Pendant que le vilain roi se retrouvait coincé dans la grotte avec le grand serpent, le petit garçon courut jusque chez lui pour retrouver sa maman. Ils vécurent heureux, et plus jamais personne n'entendit parler du roi à la corne !",
+      "image_prompt": "A young boy with bright, curious brown eyes, short messy brown hair, wearing a simple blue tunic and brown trousers, with a kind and determined expression. running joyfully through a vibrant, sunlit path towards a cozy, welcoming house, with his loving mother waiting at the door, leaving the distant castle behind."
+    }
+  ]
+}

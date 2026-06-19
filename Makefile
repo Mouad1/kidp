@@ -20,6 +20,13 @@ dashboard:
 storefront:
 	@set -a; [ -f .env.local ] && . .env.local || true; set +a; \
 	python3 scripts/storefront_doctor.py; \
+	echo "Checking if port 8000 is occupied..."; \
+	PID=$$(lsof -t -i :8000 2>/dev/null || true); \
+	if [ ! -z "$$PID" ]; then \
+		echo "Port 8000 is occupied by PID(s): $$PID. Killing occupying process..."; \
+		kill -9 $$PID 2>/dev/null || true; \
+		sleep 1; \
+	fi; \
 	python3 dashboard/app.py
 
 storefront-check:

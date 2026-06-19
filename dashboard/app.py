@@ -212,6 +212,15 @@ def _book_status(book_name: str) -> dict:
         size_mb = pdf_path.stat().st_size / 1024 / 1024
         pdf_info = {"path": str(pdf_path), "size_mb": round(size_mb, 1)}
 
+    try:
+        _rcfg = read_config(book_name)
+        extra_fields = {
+            "template_slug":  _rcfg.get("template_slug", ""),
+            "pipeline_stage": _rcfg.get("pipeline_stage", "draft"),
+        }
+    except Exception:
+        extra_fields = {"template_slug": "", "pipeline_stage": "draft"}
+
     return {
         "category":       getattr(cfg, "CATEGORY", "coloring"),
         "story_format":   getattr(cfg, "STORY_FORMAT", "colored"),
@@ -228,6 +237,7 @@ def _book_status(book_name: str) -> dict:
         "extra_images":   extra_images,
         "images_detail":  images_present,
         "pdf":            pdf_info,
+        **extra_fields,
     }
 
 
@@ -337,7 +347,7 @@ async def api_book(book_name: str):
 async def stream_generate(request: Request, book_name: str, char_id: str = "", force: bool = False):
     """Stream real-time output of pipeline/generate.py"""
     api_key = _resolve_gemini_api_key()
-    cmd = [sys.executable, str(ROOT / "pipeline" / "generate.py"), "--book", book_name, "--auto-clean"]
+    cmd = [sys.executable, "-u", str(ROOT / "pipeline" / "generate.py"), "--book", book_name, "--auto-clean"]
     if char_id:
         cmd += ["--id", char_id]
     if force:
@@ -347,6 +357,22 @@ async def stream_generate(request: Request, book_name: str, char_id: str = "", f
     if api_key:
         env["GEMINI_API_KEY"] = api_key
 
+    async def _finish_in_background(proc):
+        """Wait for subprocess to finish, then update pipeline_stage.
+        Does NOT read stdout — event_stream owns the pipe while connected;
+        generate.py output is small enough (<2 KB) to never fill the 64 KB pipe buffer."""
+        try:
+            await proc.wait()
+        except Exception:
+            pass
+        try:
+            cfg = read_config(book_name)
+            if cfg.get("pipeline_stage") == "generating":
+                cfg["pipeline_stage"] = "review"
+                write_config(book_name, cfg)
+        except Exception:
+            pass
+
     async def event_stream():
         process = None
         try:
@@ -354,28 +380,39 @@ async def stream_generate(request: Request, book_name: str, char_id: str = "", f
                 yield "data: ERROR: GEMINI_API_KEY not set in server environment.\n\n"
                 yield "data: Set it in Settings page or export GEMINI_API_KEY, then restart dashboard if needed.\n\n"
                 return
+
+            try:
+                _cfg = read_config(book_name)
+                _cfg["pipeline_stage"] = "generating"
+                write_config(book_name, _cfg)
+            except Exception:
+                pass
+
             process = await asyncio.create_subprocess_exec(
                 *cmd, env=env,
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.STDOUT,
             )
+            # Background task keeps subprocess alive even if client disconnects
+            bg_task = asyncio.create_task(_finish_in_background(process))
+
             while True:
                 if await request.is_disconnected():
-                    if process.returncode is None:
-                        process.terminate()
+                    # Don't kill — let bg_task drain + update stage
                     break
                 try:
                     line = await asyncio.wait_for(process.stdout.readline(), timeout=10.0)
                     if not line:
                         break
-                    yield f"data: {line.decode(errors='replace').rstrip()}\n\n"
+                    text = line.decode(errors='replace').rstrip()
+                    yield f"data: {text}\n\n"
                 except asyncio.TimeoutError:
-                    yield ": keepalive\n\n"  # SSE comment — keeps connection alive, ignored by browser
-            if process.returncode is None:
-                await process.wait()
+                    yield ": keepalive\n\n"
+
+            if process.returncode is not None and process.returncode != 0:
+                yield f"data: ERROR: generate.py exited with code {process.returncode}\n\n"
         except asyncio.CancelledError:
-            if process and process.returncode is None:
-                process.terminate()
+            # Don't terminate — bg_task handles cleanup
             raise
         except Exception as e:
             yield f"data: ERROR: {e}\n\n"
@@ -383,7 +420,6 @@ async def stream_generate(request: Request, book_name: str, char_id: str = "", f
             try:
                 yield "data: [DONE]\n\n"
             except Exception:
-                # Client connection may already be closed; suppress trailing write errors.
                 pass
 
     return StreamingResponse(event_stream(), media_type="text/event-stream",
@@ -2028,6 +2064,147 @@ def admin_stats(request: Request):
     return stats
 
 
+@app.post("/api/storyforge")
+async def storyforge_create(request: Request):
+    """Crée le squelette d'un nouveau storyforge book."""
+    if _require_admin(request) is None:
+        raise HTTPException(status_code=401, detail="Admin requis.")
+    body = await request.json()
+    name = body.get("name", "").strip()
+    title = body.get("title", "").strip()
+    author = body.get("author", "").strip()
+    if not name or not re.match(r'^[a-z0-9][a-z0-9-]*[a-z0-9]$', name):
+        raise HTTPException(status_code=400, detail="Nom invalide (minuscules, tirets, ex: my-story)")
+    book_dir = ROOT / "books" / name
+    if book_dir.exists():
+        raise HTTPException(status_code=409, detail="Ce nom de book existe déjà.")
+    book_dir.mkdir(parents=True)
+    write_config(name, {
+        "category": "story",
+        "title": title,
+        "author": author,
+        "languages": ["fr"],
+        "pipeline_stage": "draft",
+        "template_slug": name,
+        "pages": [],
+    })
+    return {"name": name, "title": title}
+
+
+@app.post("/stream/storyforge/{name}/generate-script")
+async def storyforge_generate_script(name: str, request: Request):
+    """SSE: génère un script depuis source (texte ou URL) et le sauvegarde dans config."""
+    if _require_admin(request) is None:
+        raise HTTPException(status_code=401, detail="Admin requis.")
+    if not re.match(r'^[a-z0-9][a-z0-9-]*[a-z0-9]$', name):
+        raise HTTPException(status_code=400, detail="Invalid book name")
+    body = await request.json()
+    source = body.get("source", "").strip()
+    page_count = int(body.get("page_count", 8))
+    if not source:
+        raise HTTPException(status_code=400, detail="Source requise.")
+
+    from pipeline.story_gen import generate_from_source as _gen_source
+
+    def stream():
+        try:
+            yield "data: Analyse de la source...\n\n"
+            result = _gen_source(source, page_count=page_count)
+
+            yield "data: Script généré, sauvegarde...\n\n"
+            cfg2 = read_config(name)
+            cfg2["story_base_prompt"] = result.get("story_base_prompt", "")
+            cfg2["default_character_description"] = result.get("default_character_description", "")
+            cfg2["intro_text"] = result.get("intro_text", "")
+            cfg2["values_learned"] = result.get("values_learned", "")
+            cfg2["pages"] = result.get("config_pages", result.get("pages", []))
+            cfg2["pipeline_stage"] = "script_ready"
+            write_config(name, cfg2)
+
+            yield "data: Création du template storyforge...\n\n"
+            import json as _json
+            tpl_dir = ROOT / "templates" / name
+            tpl_dir.mkdir(parents=True, exist_ok=True)
+            tpl_pages = [
+                {
+                    "beat": f"Page {p['page_number']}",
+                    "text": p.get("text", {}).get("fr", ""),
+                    "image_prompt": p.get("image_prompt", ""),
+                }
+                for p in result.get("pages", [])
+            ]
+            tpl_json = {
+                "name": cfg2.get("title", name),
+                "mode": "color",
+                "language_default": "fr",
+                "art_style": result.get("story_base_prompt", ""),
+                "variables": [
+                    {"key": "HERO_NAME", "label": "Prénom de l'enfant",
+                     "type": "text", "options": [], "default": None}
+                ],
+                "pages": tpl_pages,
+            }
+            (tpl_dir / "template.json").write_text(
+                _json.dumps(tpl_json, ensure_ascii=False, indent=2), encoding="utf-8"
+            )
+
+            yield "data: [DONE]\n\n"
+        except Exception as exc:
+            try:
+                cfg_err = read_config(name)
+                cfg_err["pipeline_stage"] = "draft"
+                write_config(name, cfg_err)
+            except Exception:
+                pass
+            yield f"data: ERROR: {exc}\n\n"
+
+    return StreamingResponse(
+        stream(), media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+    )
+
+
+@app.put("/api/storyforge/{name}/script")
+async def storyforge_save_script(name: str, request: Request):
+    """Sauvegarde le script édité par l'admin (pages + story_base_prompt)."""
+    if _require_admin(request) is None:
+        raise HTTPException(status_code=401, detail="Admin requis.")
+    if not re.match(r'^[a-z0-9][a-z0-9-]*[a-z0-9]$', name):
+        raise HTTPException(status_code=400, detail="Invalid book name")
+    body = await request.json()
+    try:
+        cfg = read_config(name)
+    except FileNotFoundError:
+        raise HTTPException(status_code=404, detail="Book not found.")
+    if "pages" in body:
+        cfg["pages"] = body["pages"]
+    if "story_base_prompt" in body:
+        cfg["story_base_prompt"] = body["story_base_prompt"]
+    if "title" in body:
+        cfg["title"] = body["title"]
+    if "intro_text" in body:
+        cfg["intro_text"] = body["intro_text"]
+    if "values_learned" in body:
+        cfg["values_learned"] = body["values_learned"]
+    cfg["pipeline_stage"] = "script_ready"
+    write_config(name, cfg)
+
+    import json as _json
+    tpl_path = ROOT / "templates" / name / "template.json"
+    if tpl_path.exists():
+        tpl = _json.loads(tpl_path.read_text())
+        tpl["pages"] = [
+            {"beat": f"Page {p['page_number']}",
+             "text": p.get("text", {}).get("fr", ""),
+             "image_prompt": p.get("image_prompt", "")}
+            for p in cfg["pages"]
+        ]
+        tpl["art_style"] = cfg.get("story_base_prompt", tpl.get("art_style", ""))
+        tpl_path.write_text(_json.dumps(tpl, ensure_ascii=False, indent=2))
+
+    return {"saved": True, "page_count": len(cfg["pages"])}
+
+
 @app.post("/api/storyforge/{name}/publish")
 def storyforge_publish(name: str, published: bool = True):
     if not re.match(r'^[a-z0-9][a-z0-9-]*[a-z0-9]$', name):
@@ -2037,6 +2214,7 @@ def storyforge_publish(name: str, published: bool = True):
     except FileNotFoundError:
         raise HTTPException(status_code=404, detail="Book not found.")
     cfg["published"] = published
+    cfg["pipeline_stage"] = "published" if published else "review"
     write_config(name, cfg)
     return {"name": name, "published": published}
 
@@ -2076,6 +2254,74 @@ def storyforge_translate(name: str, request: Request):
     )
 
 
+@app.get("/admin/stories/new", response_class=HTMLResponse)
+def admin_story_new(request: Request):
+    if _require_admin(request) is None:
+        return RedirectResponse(url="/admin/login", status_code=303)
+    return templates.TemplateResponse(request=request, name="admin_story_new.html", context={})
+
+
+@app.get("/admin/stories/{name}/script", response_class=HTMLResponse)
+def admin_story_script(name: str, request: Request):
+    if _require_admin(request) is None:
+        return RedirectResponse(url="/admin/login", status_code=303)
+    if not re.match(r'^[a-z0-9][a-z0-9-]*[a-z0-9]$', name):
+        raise HTTPException(status_code=400)
+    try:
+        cfg = read_config(name)
+    except FileNotFoundError:
+        raise HTTPException(status_code=404)
+    supported = _sf_i18n.load_supported_languages()
+    return templates.TemplateResponse(
+        request=request, name="admin_story_script.html",
+        context={
+            "book_name":                     name,
+            "title":                         cfg.get("title", name),
+            "pipeline_stage":                cfg.get("pipeline_stage", "draft"),
+            "pages":                         cfg.get("pages", []),
+            "story_base_prompt":             cfg.get("story_base_prompt", ""),
+            "default_character_description": cfg.get("default_character_description", ""),
+            "intro_text":                    cfg.get("intro_text", ""),
+            "values_learned":                cfg.get("values_learned", ""),
+            "supported_languages":           supported,
+        }
+    )
+
+
+@app.get("/admin/stories/{name}/review", response_class=HTMLResponse)
+def admin_story_review(name: str, request: Request):
+    if _require_admin(request) is None:
+        return RedirectResponse(url="/admin/login", status_code=303)
+    if not re.match(r'^[a-z0-9][a-z0-9-]*[a-z0-9]$', name):
+        raise HTTPException(status_code=400)
+    try:
+        cfg = read_config(name)
+    except FileNotFoundError:
+        raise HTTPException(status_code=404)
+    supported = _sf_i18n.load_supported_languages()
+    pages = [
+        {
+            "number": p.get("page_number", i + 1),
+            "image_url": f"/images/{name}/{name}_page_{p.get('page_number', i+1)}.png",
+            "text": p.get("text", {}),
+        }
+        for i, p in enumerate(cfg.get("pages", []))
+    ]
+    cover_path = ROOT / "books" / name / "hero" / "cover.png"
+    return templates.TemplateResponse(
+        request=request, name="admin_story_review.html",
+        context={
+            "book_name":           name,
+            "title":               cfg.get("title", name),
+            "published":           cfg.get("published", False),
+            "pipeline_stage":      cfg.get("pipeline_stage", "draft"),
+            "pages":               pages,
+            "supported_languages": supported,
+            "cover_url":           f"/books/{name}/hero/cover.png" if cover_path.exists() else None,
+        }
+    )
+
+
 @app.get("/admin/stories", response_class=HTMLResponse)
 def admin_stories(request: Request):
     if _require_admin(request) is None:
@@ -2091,14 +2337,17 @@ def admin_stories(request: Request):
         book_langs = set(status.get("languages", []))
         missing = [lang for lang in supported if lang not in book_langs]
         entries.append({
-            "slug":        name,
-            "title":       status.get("title", name),
-            "category":    status.get("category", ""),
-            "page_count":  status.get("in_sequence", 0),
-            "order_count": order_counts.get(name, 0),
-            "published":   status.get("published", False),
-            "languages":   sorted(book_langs),
-            "missing":     missing,
+            "slug":           name,
+            "title":          status.get("title", name),
+            "category":       status.get("category", ""),
+            "page_count":     status.get("in_sequence", 0),
+            "order_count":    order_counts.get(name, 0),
+            "published":      status.get("published", False),
+            "languages":      sorted(book_langs),
+            "missing":        missing,
+            "template_slug":  status.get("template_slug", ""),
+            "pipeline_stage": status.get("pipeline_stage", "draft"),
+            "has_hero":       (ROOT / "books" / name / "hero" / "canonical_portrait.png").exists(),
         })
     return templates.TemplateResponse(
         request=request, name="admin_stories.html",
@@ -2109,7 +2358,19 @@ def admin_stories(request: Request):
 if __name__ == "__main__":
     import uvicorn
     print("\nKDP Dashboard running at http://localhost:8000\n")
-    uvicorn.run("dashboard.app:app", host="0.0.0.0", port=8000, reload=True, app_dir=str(ROOT))
+    uvicorn.run(
+        "dashboard.app:app",
+        host="0.0.0.0",
+        port=8000,
+        reload=True,
+        reload_dirs=[
+            str(ROOT / "dashboard"),
+            str(ROOT / "pipeline"),
+            str(ROOT / "storefront"),
+            str(ROOT / "storyforge"),
+        ],
+        app_dir=str(ROOT),
+    )
 
 
 

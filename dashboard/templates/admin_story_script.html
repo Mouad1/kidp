@@ -1,0 +1,228 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>{{ title }} — Script</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .spin { animation: spin .8s linear infinite; }
+  </style>
+</head>
+<body class="bg-gray-50 text-gray-900 min-h-screen">
+
+  <header class="bg-white border-b border-gray-200 px-6 py-4 sticky top-0 z-10">
+    <div class="max-w-4xl mx-auto flex items-center justify-between gap-4">
+      <div class="flex items-center gap-3">
+        <a href="/admin/stories" class="text-indigo-600 hover:text-indigo-800 text-sm">← Stories</a>
+        <h1 class="font-bold text-base">{{ title }} <span class="text-xs text-gray-400 font-normal">— Script</span></h1>
+      </div>
+      <div class="flex items-center gap-2">
+        <button onclick="saveScript()" id="btn-save"
+          class="px-4 py-1.5 rounded-lg text-sm font-semibold bg-white border border-gray-200 hover:bg-gray-50 text-gray-700">
+          Sauvegarder
+        </button>
+        <button onclick="generateImages()" id="btn-generate"
+          class="px-4 py-1.5 rounded-lg text-sm font-semibold bg-indigo-600 text-white hover:bg-indigo-700">
+          Générer images →
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <main class="max-w-4xl mx-auto px-6 py-8 space-y-6">
+
+    <section class="bg-white rounded-xl border border-gray-200 p-5 space-y-3">
+      <h2 class="font-semibold text-sm text-gray-700">Charte graphique</h2>
+      <textarea id="story-base-prompt" rows="3"
+        class="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm resize-y focus:outline-none focus:ring-2 focus:ring-indigo-400">{{ story_base_prompt }}</textarea>
+    </section>
+
+    <section class="bg-white rounded-xl border border-gray-200 p-5 space-y-3">
+      <div class="flex items-center gap-2">
+        <h2 class="font-semibold text-sm text-gray-700">Personnage par défaut</h2>
+        <span class="text-xs text-blue-600 bg-blue-50 px-2 py-0.5 rounded-full">description texte</span>
+      </div>
+      <p class="text-xs text-gray-500">Générée par l'IA. Utilisée pour les images du template. Remplacée par la photo de l'enfant à la commande client.</p>
+      <textarea id="default-char-desc" rows="3"
+        class="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm resize-y focus:outline-none focus:ring-2 focus:ring-indigo-400">{{ default_character_description }}</textarea>
+    </section>
+
+    <!-- Page navigator -->
+    <section class="space-y-4">
+      <div class="flex items-center justify-between">
+        <h2 class="font-semibold text-sm text-gray-700">Pages</h2>
+        <div class="flex items-center gap-3">
+          <button onclick="prevPage()" id="btn-prev"
+            class="px-3 py-1.5 rounded-lg text-sm font-medium bg-white border border-gray-200 hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed">
+            ← Préc
+          </button>
+          <span id="page-counter" class="text-sm text-gray-600 font-medium">Page 1 / {{ pages | length }}</span>
+          <button onclick="nextPage()" id="btn-next"
+            class="px-3 py-1.5 rounded-lg text-sm font-medium bg-white border border-gray-200 hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed">
+            Suiv →
+          </button>
+        </div>
+      </div>
+
+      {% for page in pages %}
+      <div class="bg-white rounded-xl border border-gray-200 overflow-hidden {% if not loop.first %}hidden{% endif %}"
+           data-page-index="{{ loop.index0 }}">
+        <div class="px-5 py-3 border-b border-gray-100 flex items-center justify-between">
+          <span class="font-semibold text-sm">Page {{ page.page_number }}</span>
+          <span class="text-xs text-gray-400">{{ loop.index }} / {{ pages | length }}</span>
+        </div>
+        <div class="p-5 space-y-4">
+          <div>
+            <label class="block text-xs text-gray-500 mb-1">Texte</label>
+            <div class="flex gap-2 mb-2 flex-wrap">
+              {% for lang in supported_languages %}
+              <button
+                class="px-2.5 py-1 rounded-full text-xs font-medium border transition-colors {% if loop.first %}bg-indigo-600 text-white border-indigo-600{% else %}bg-white text-gray-500 border-gray-200{% endif %}"
+                data-lang="{{ lang }}" data-page="{{ loop.index0 }}"
+                onclick="showPageLang('{{ lang }}', {{ loop.index0 }})">{{ lang | upper }}</button>
+              {% endfor %}
+            </div>
+            {% for lang in supported_languages %}
+            <textarea data-lang-text="{{ lang }}" data-page="{{ loop.index0 }}" rows="4"
+              class="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm resize-y focus:outline-none focus:ring-2 focus:ring-indigo-400 {% if not loop.first %}hidden{% endif %}"
+            >{{ page.text.get(lang, '') if page.text is mapping else '' }}</textarea>
+            {% endfor %}
+          </div>
+          <div>
+            <label class="block text-xs text-gray-500 mb-1">Image prompt <span class="text-gray-400">(description personnage incluse)</span></label>
+            <textarea data-image-prompt data-page="{{ loop.index0 }}" rows="3"
+              class="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm font-mono resize-y focus:outline-none focus:ring-2 focus:ring-indigo-400"
+            >{{ page.image_prompt }}</textarea>
+          </div>
+        </div>
+      </div>
+      {% endfor %}
+    </section>
+
+  </main>
+
+  <div id="generate-overlay" class="hidden fixed inset-0 bg-gray-900/60 z-50 flex items-center justify-center p-6">
+    <div class="bg-white rounded-2xl p-8 max-w-sm w-full text-center space-y-4">
+      <div class="w-8 h-8 border-4 border-indigo-600 border-t-transparent rounded-full spin mx-auto"></div>
+      <p id="generate-msg" class="text-sm text-gray-700">Initialisation...</p>
+      <p class="text-xs text-gray-400">Ne pas fermer cette page</p>
+    </div>
+  </div>
+
+  <script>
+    const BOOK_NAME = {{ book_name | tojson }};
+    const TOTAL_PAGES = document.querySelectorAll('[data-page-index]').length;
+    let currentPage = 0;
+
+    function showPage(idx) {
+      document.querySelectorAll('[data-page-index]').forEach(el => el.classList.add('hidden'));
+      const card = document.querySelector(`[data-page-index="${idx}"]`);
+      if (card) card.classList.remove('hidden');
+      currentPage = idx;
+      document.getElementById('page-counter').textContent = `Page ${idx + 1} / ${TOTAL_PAGES}`;
+      document.getElementById('btn-prev').disabled = idx === 0;
+      document.getElementById('btn-next').disabled = idx === TOTAL_PAGES - 1;
+    }
+
+    function prevPage() { if (currentPage > 0) showPage(currentPage - 1); }
+    function nextPage() { if (currentPage < TOTAL_PAGES - 1) showPage(currentPage + 1); }
+
+    // Init nav state
+    document.addEventListener('DOMContentLoaded', () => showPage(0));
+
+    // Keyboard navigation
+    document.addEventListener('keydown', (e) => {
+      if (e.target.tagName === 'TEXTAREA' || e.target.tagName === 'INPUT') return;
+      if (e.key === 'ArrowRight' || e.key === 'ArrowDown') nextPage();
+      if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') prevPage();
+    });
+
+    function showPageLang(lang, pageIdx) {
+      document.querySelectorAll(`[data-lang-text][data-page="${pageIdx}"]`).forEach(el => el.classList.add('hidden'));
+      document.querySelector(`[data-lang-text="${lang}"][data-page="${pageIdx}"]`).classList.remove('hidden');
+      document.querySelectorAll(`[data-lang][data-page="${pageIdx}"]`).forEach(btn => {
+        const active = btn.dataset.lang === lang;
+        btn.className = active
+          ? 'px-2.5 py-1 rounded-full text-xs font-medium border bg-indigo-600 text-white border-indigo-600'
+          : 'px-2.5 py-1 rounded-full text-xs font-medium border bg-white text-gray-500 border-gray-200';
+      });
+    }
+
+    function collectPages() {
+      return [...document.querySelectorAll('[data-page-index]')].map(card => {
+        const idx = parseInt(card.dataset.pageIndex);
+        const text = {};
+        card.querySelectorAll('[data-lang-text]').forEach(ta => { text[ta.dataset.langText] = ta.value; });
+        return {
+          page_number: idx + 1,
+          text,
+          image_prompt: card.querySelector('[data-image-prompt]')?.value || '',
+          moral: '',
+        };
+      });
+    }
+
+    async function saveScript() {
+      const btn = document.getElementById('btn-save');
+      btn.disabled = true; btn.textContent = '⏳...';
+      try {
+        const r = await fetch(`/api/storyforge/${BOOK_NAME}/script`, {
+          method: 'PUT',
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify({
+            pages: collectPages(),
+            story_base_prompt: document.getElementById('story-base-prompt').value,
+            default_character_description: document.getElementById('default-char-desc').value,
+          }),
+        });
+        if (!r.ok) throw new Error((await r.json().catch(()=>({}))).detail || 'Erreur');
+        btn.textContent = '✓ Sauvegardé';
+        setTimeout(() => { btn.textContent = 'Sauvegarder'; btn.disabled = false; }, 2000);
+      } catch (err) {
+        btn.textContent = '✗ Erreur'; btn.disabled = false;
+      }
+    }
+
+    async function generateImages() {
+      await saveScript();
+      const overlay = document.getElementById('generate-overlay');
+      const msgEl = document.getElementById('generate-msg');
+      overlay.classList.remove('hidden');
+
+      let savedCount = 0;
+      let failedLines = [];
+
+      const es = new EventSource(`/stream/generate/${BOOK_NAME}`);
+      es.onmessage = (ev) => {
+        if (ev.data === '[DONE]') {
+          es.close();
+          if (savedCount === 0 && failedLines.length > 0) {
+            overlay.classList.add('hidden');
+            alert('Génération échouée. Aucune image sauvegardée.\n\n' + failedLines.slice(0, 3).join('\n'));
+            return;
+          }
+          window.location.href = `/admin/stories/${BOOK_NAME}/review`;
+          return;
+        }
+        if (ev.data.startsWith('ERROR:')) {
+          es.close(); overlay.classList.add('hidden'); alert(ev.data); return;
+        }
+        if (ev.data.includes('FAILED:') || ev.data.includes('Saved: 0')) {
+          failedLines.push(ev.data);
+        }
+        if (ev.data.includes('Saved:') && !ev.data.includes('FAILED')) {
+          savedCount++;
+        }
+        if (ev.data.includes('Generated:')) {
+          const m = ev.data.match(/Generated:\s*(\d+)/);
+          if (m) savedCount = parseInt(m[1]);
+        }
+        msgEl.textContent = ev.data;
+      };
+      es.onerror = () => { es.close(); overlay.classList.add('hidden'); alert('Erreur connexion.'); };
+    }
+  </script>
+</body>
+</html>

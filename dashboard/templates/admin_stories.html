@@ -20,6 +20,10 @@
         <h1 class="text-lg font-bold">Stories</h1>
       </div>
       <div class="flex items-center gap-4 text-sm">
+        <a href="/admin/stories/new"
+          class="px-4 py-1.5 rounded-lg font-semibold bg-indigo-600 text-white hover:bg-indigo-700 transition-colors">
+          + Nouvelle Story
+        </a>
         <a href="/admin/orders" class="text-indigo-600 hover:text-indigo-800">← Orders</a>
         <a href="/" class="text-indigo-600 hover:text-indigo-800">← Dashboard</a>
       </div>
@@ -35,15 +39,29 @@
     <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
       {% for e in entries %}
       <div
-        class="bg-white rounded-xl border-2 p-5 flex flex-col gap-3 {% if e.published %}border-emerald-300{% else %}border-gray-200{% endif %}"
+        class="bg-white rounded-xl border-2 p-5 flex flex-col gap-3
+          {% if e.published %}border-emerald-300
+          {% elif e.pipeline_stage == 'review' %}border-amber-300
+          {% elif e.pipeline_stage == 'script_ready' %}border-blue-300
+          {% elif e.pipeline_stage == 'generating' %}border-violet-300
+          {% else %}border-gray-200{% endif %}"
         data-slug="{{ e.slug }}"
         data-published="{{ 'true' if e.published else 'false' }}"
+        data-stage="{{ e.pipeline_stage }}"
       >
         <div class="flex items-start justify-between gap-2">
           <h2 class="font-bold text-base leading-tight">{{ e.title }}</h2>
           <span class="shrink-0 px-2 py-0.5 rounded-full text-xs font-semibold
-            {% if e.published %}bg-emerald-100 text-emerald-700{% else %}bg-gray-100 text-gray-500{% endif %}">
-            {% if e.published %}Publié{% else %}Masqué{% endif %}
+            {% if e.published %}bg-emerald-100 text-emerald-700
+            {% elif e.pipeline_stage == 'review' %}bg-amber-100 text-amber-700
+            {% elif e.pipeline_stage == 'script_ready' %}bg-blue-100 text-blue-700
+            {% elif e.pipeline_stage == 'generating' %}bg-violet-100 text-violet-700
+            {% else %}bg-gray-100 text-gray-500{% endif %}">
+            {% if e.published %}Publié
+            {% elif e.pipeline_stage == 'review' %}À réviser
+            {% elif e.pipeline_stage == 'script_ready' %}Script prêt
+            {% elif e.pipeline_stage == 'generating' %}Génération...
+            {% else %}Brouillon{% endif %}
           </span>
         </div>
 
@@ -71,6 +89,22 @@
         <div class="text-xs text-gray-400 font-mono">{{ e.slug }}</div>
 
         <div class="mt-auto pt-2 space-y-2">
+          {% if e.pipeline_stage == 'draft' %}
+          <a href="/admin/stories/{{ e.slug }}/script"
+            class="block w-full py-1.5 rounded-lg text-sm font-medium text-center bg-blue-50 text-blue-700 hover:bg-blue-100">
+            Éditer le script
+          </a>
+          {% elif e.pipeline_stage == 'script_ready' %}
+          <a href="/admin/stories/{{ e.slug }}/script"
+            class="block w-full py-1.5 rounded-lg text-sm font-medium text-center bg-blue-50 text-blue-700 hover:bg-blue-100">
+            Valider + Générer images →
+          </a>
+          {% elif e.pipeline_stage in ['review', 'published'] or e.published %}
+          <a href="/admin/stories/{{ e.slug }}/review"
+            class="block w-full py-1.5 rounded-lg text-sm font-medium text-center bg-amber-50 text-amber-700 hover:bg-amber-100">
+            Réviser les pages
+          </a>
+          {% endif %}
           {% if e.missing %}
           <button
             onclick="translateBook(this)"

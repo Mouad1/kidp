@@ -1,0 +1,19 @@
+services:
+  storyforge:
+    image: ghcr.io/mouad1/kidp:latest
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:8001:8000"
+    env_file: .env
+    volumes:
+      - storyforge_images:/app/images
+      - storyforge_templates:/app/templates
+      - storyforge_storefront:/app/.storefront
+      - storyforge_books:/app/books
+      - /home/storyforge/settings.json:/app/settings.json
+
+volumes:
+  storyforge_images:
+  storyforge_templates:
+  storyforge_storefront:
+  storyforge_books:

@@ -130,3 +130,31 @@ def test_write_config_images_dir_uses_relative_path(fake_book, monkeypatch):
     assert '"book-test"' in content
     # Jamais de chemin absolu hardcodé
     assert '/Users/' not in content
+
+
+def test_template_slug_pipeline_stage_default_char_round_trip(tmp_path, monkeypatch):
+    import pipeline.config_io as cio
+    monkeypatch.setattr(cio, "ROOT", tmp_path)
+    (tmp_path / "books" / "test-sf-stage").mkdir(parents=True)
+    data = {
+        "category": "story", "title": "My Story",
+        "template_slug": "jungle-adventure", "pipeline_stage": "script_ready",
+        "default_character_description": "young girl, brown curly hair, olive skin, warm smile",
+        "languages": ["fr"], "pages": [],
+    }
+    cio.write_config("test-sf-stage", data)
+    result = cio.read_config("test-sf-stage")
+    assert result["template_slug"] == "jungle-adventure"
+    assert result["pipeline_stage"] == "script_ready"
+    assert result["default_character_description"] == "young girl, brown curly hair, olive skin, warm smile"
+
+
+def test_pipeline_stage_defaults_to_draft(tmp_path, monkeypatch):
+    import pipeline.config_io as cio
+    monkeypatch.setattr(cio, "ROOT", tmp_path)
+    (tmp_path / "books" / "test-sf-draft").mkdir(parents=True)
+    data = {"category": "story", "title": "Legacy", "languages": ["fr"], "pages": []}
+    cio.write_config("test-sf-draft", data)
+    result = cio.read_config("test-sf-draft")
+    assert result["pipeline_stage"] == "draft"
+    assert result["template_slug"] == ""

@@ -87,6 +87,9 @@ def read_config(book_name: str) -> dict:
             "price_usd": 8.99,
             "amazon_asin": "",
         }),
+        "template_slug":                getattr(module, "TEMPLATE_SLUG",               ""),
+        "pipeline_stage":               getattr(module, "PIPELINE_STAGE",              "draft"),
+        "default_character_description": getattr(module, "DEFAULT_CHARACTER_DESC",     ""),
     }
 
 
@@ -144,7 +147,10 @@ def write_config(book_name: str, data: dict) -> None:
         title_page_lines     = title_page_lines,
         copyright_page_lines = copyright_page_lines,
         back_page_lines      = back_page_lines,
-        kdp_metadata         = kdp_metadata,
+        kdp_metadata                  = kdp_metadata,
+        template_slug                 = data.get("template_slug",  ""),
+        pipeline_stage                = data.get("pipeline_stage", "draft"),
+        default_character_description = data.get("default_character_description", ""),
     )
     config_path.parent.mkdir(parents=True, exist_ok=True)
     config_path.write_text(content, encoding="utf-8")
@@ -172,6 +178,9 @@ def _render_config(
     copyright_page_lines: list,
     back_page_lines: list,
     kdp_metadata: dict = None,
+    template_slug: str = "",
+    pipeline_stage: str = "draft",
+    default_character_description: str = "",
 ) -> str:
     if kdp_metadata is None:
         kdp_metadata = {}
@@ -229,6 +238,9 @@ def _render_config(
         f'# ── Identity ───────────────────────────────────────────────────────────────────\n\n'
         f'CATEGORY       = {json.dumps(category, ensure_ascii=False)}\n'
         f'PUBLISHED      = {published!r}\n'
+        f'TEMPLATE_SLUG       = {json.dumps(template_slug, ensure_ascii=False)}\n'
+        f'PIPELINE_STAGE      = {json.dumps(pipeline_stage, ensure_ascii=False)}\n'
+        f'DEFAULT_CHARACTER_DESC = {json.dumps(default_character_description, ensure_ascii=False)}\n'
         f'STORY_FORMAT   = {json.dumps(story_format, ensure_ascii=False)}\n'
         f'STORY_LAYOUT   = {json.dumps(story_layout, ensure_ascii=False)}\n'
         f'LANGUAGES      = {json.dumps(languages, ensure_ascii=False)}\n'

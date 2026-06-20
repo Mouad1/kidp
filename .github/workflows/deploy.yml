@@ -36,18 +36,25 @@ jobs:
 
       - name: Deploy to VPS
         uses: appleboy/ssh-action@v1
+        env:
+          GH_DEPLOY_KEY: ${{ secrets.GH_DEPLOY_KEY }}
         with:
           host: ${{ secrets.VPS_HOST }}
           username: ${{ secrets.VPS_USER }}
           key: ${{ secrets.VPS_SSH_KEY }}
+          envs: GH_DEPLOY_KEY
           script: |
             set -e
+            echo "$GH_DEPLOY_KEY" > /tmp/gh_deploy_key
+            chmod 600 /tmp/gh_deploy_key
+            export GIT_SSH_COMMAND="ssh -i /tmp/gh_deploy_key -o StrictHostKeyChecking=no"
+
             if [ ! -d /home/storyforge/.git ]; then
-              git clone https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/Mouad1/kidp.git /home/storyforge
+              git clone git@github.com:Mouad1/kidp.git /home/storyforge
             fi
             cd /home/storyforge
-            git remote set-url origin https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/Mouad1/kidp.git
             git pull origin main
+            rm -f /tmp/gh_deploy_key
 
             printf 'GEMINI_API_KEY=%s\n' '${{ secrets.GEMINI_API_KEY }}' > .env
             printf 'STOREFRONT_SESSION_SECRET=%s\n' '${{ secrets.STOREFRONT_SESSION_SECRET }}' >> .env

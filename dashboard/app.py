@@ -1473,6 +1473,18 @@ def store_set_language(request: Request, lang: str = Form(...), next: str = Form
     return resp
 
 
+def _resolve_intro_text(intro_text, lang: str, fallback: str) -> str:
+    """Resolve intro_text (dict or str) to a display string for the given language."""
+    if isinstance(intro_text, dict):
+        return (intro_text.get(lang)
+                or intro_text.get("fr")
+                or next(iter(intro_text.values()), "")
+                or fallback)
+    if isinstance(intro_text, str) and intro_text.strip():
+        return intro_text.strip()
+    return fallback
+
+
 @app.get("/store", response_class=HTMLResponse)
 def store_catalog(request: Request):
     lang = _sf_i18n.resolve_language(request)
@@ -1484,6 +1496,7 @@ def store_catalog(request: Request):
         book_languages = cfg.get("languages") or ["fr"]
         quote = _store_price_quote(e.page_count)
         cover_url = f"/images/{e.slug}/{e.slug}_page_1.png"
+        fallback = _sf_i18n.get_strings(lang).get("catalog_subtitle", "")
         view.append({
             "slug": e.slug,
             "title": e.title,
@@ -1493,6 +1506,9 @@ def store_catalog(request: Request):
             "languages": book_languages,
             "all_languages": supported,
             "intro_text": cfg.get("intro_text", ""),
+            "intro_text_display": _resolve_intro_text(
+                cfg.get("intro_text", ""), lang, fallback
+            ),
             "cover_url": cover_url,
         })
     return templates.TemplateResponse(

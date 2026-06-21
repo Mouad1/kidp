@@ -74,6 +74,14 @@ def test_catalog_lists_only_published(store_env):
     assert "$3.20" in r.text
 
 
+def test_catalog_shows_intro_text(store_env, monkeypatch):
+    catalog = store_env["catalog"]
+    catalog["alpha"]["intro_text"] = {"fr": "Une histoire magique.", "en": "A magical story."}
+    r = client.get("/store", headers={"Accept-Language": "fr"})
+    assert r.status_code == 200
+    assert "Une histoire magique." in r.text
+
+
 def test_personalize_published_ok(store_env):
     r = client.get("/store/alpha")
     assert r.status_code == 200

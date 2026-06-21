@@ -22,3 +22,14 @@ def is_admin(db: Database, email: str) -> bool:
         return False
     row = db.query_one("SELECT email FROM admins WHERE email = ?", (normalized,))
     return row is not None
+
+
+def list_admins(db: Database) -> list[dict]:
+    rows = db.query_all("SELECT email, created_at FROM admins ORDER BY created_at ASC")
+    return [{"email": row["email"], "created_at": row["created_at"]} for row in rows]
+
+
+def remove_admin(db: Database, email: str) -> None:
+    normalized = (email or "").strip().lower()
+    if normalized:
+        db.execute("DELETE FROM admins WHERE email = ?", (normalized,))

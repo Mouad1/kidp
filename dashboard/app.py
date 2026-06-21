@@ -57,7 +57,8 @@ from storefront.db import (
     set_order_status as _sf_set_order_status, list_orders as _sf_list_orders,
     set_order_notes as _sf_set_order_notes, get_stats as _sf_get_stats,
 )
-from storefront.admin import seed_admins as _sf_seed_admins, is_admin as _sf_is_admin
+from storefront.admin import seed_admins as _sf_seed_admins, is_admin as _sf_is_admin, \
+    list_admins as _sf_list_admins, remove_admin as _sf_remove_admin
 from storefront import i18n as _sf_i18n
 
 ROOT = pathlib.Path(__file__).parent.parent
@@ -2078,6 +2079,51 @@ def admin_stats(request: Request):
         month_prefix=now.strftime("%Y-%m"),
     )
     return stats
+
+
+@app.get("/api/admin/emails")
+def admin_list_emails(request: Request):
+    if _require_admin(request) is None:
+        raise HTTPException(status_code=401, detail="Admin sign in required.")
+    rows = _sf_list_admins(_store_db())
+    return {"emails": rows}
+
+
+class AdminEmailModel(BaseModel):
+    email: str
+
+
+@app.post("/api/admin/emails")
+def admin_add_email(request: Request, data: AdminEmailModel):
+    if _require_admin(request) is None:
+        raise HTTPException(status_code=401, detail="Admin sign in required.")
+    normalized = (data.email or "").strip().lower()
+    if not re.match(r"^[^@\s]+@[^@\s]+\.[^@\s]+$", normalized):
+        raise HTTPException(status_code=400, detail="Invalid email address.")
+    _sf_seed_admins(_store_db(), [normalized], now=_dt.datetime.utcnow())
+    return {"added": True, "email": normalized}
+
+
+@app.delete("/api/admin/emails/{email}")
+def admin_remove_email(email: str, request: Request):
+    if _require_admin(request) is None:
+        raise HTTPException(status_code=401, detail="Admin sign in required.")
+    normalized = (email or "").strip().lower()
+    if not normalized:
+        raise HTTPException(status_code=400, detail="Invalid email.")
+    _sf_remove_admin(_store_db(), normalized)
+    return {"removed": True, "email": normalized}
+
+
+@app.get("/admin/settings", response_class=HTMLResponse)
+def admin_settings_page(request: Request):
+    if _require_admin(request) is None:
+        return RedirectResponse(url="/admin/login", status_code=303)
+    emails = _sf_list_admins(_store_db())
+    return templates.TemplateResponse(
+        request=request, name="admin_settings.html",
+        context={"emails": emails},
+    )
 
 
 @app.post("/api/storyforge")

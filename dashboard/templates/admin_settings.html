@@ -27,7 +27,7 @@
         {% for row in emails %}
         <li class="flex items-center justify-between py-3">
           <span class="text-sm font-medium text-gray-800">{{ row.email }}</span>
-          <button onclick="removeEmail('{{ row.email }}')"
+          <button data-email="{{ row.email }}" data-action="remove-email"
                   class="text-xs text-red-500 hover:text-red-700 font-medium px-3 py-1 rounded-lg hover:bg-red-50 transition">
             Remove
           </button>
@@ -79,12 +79,20 @@
       if (empty) empty.remove();
       const li = document.createElement("li");
       li.className = "flex items-center justify-between py-3";
-      li.innerHTML = `
-        <span class="text-sm font-medium text-gray-800">${email}</span>
-        <button onclick="removeEmail('${email}')"
-                class="text-xs text-red-500 hover:text-red-700 font-medium px-3 py-1 rounded-lg hover:bg-red-50 transition">
-          Remove
-        </button>`;
+
+      const span = document.createElement("span");
+      span.className = "text-sm font-medium text-gray-800";
+      span.textContent = email;
+
+      const btn = document.createElement("button");
+      btn.type = "button";
+      btn.className = "text-xs text-red-500 hover:text-red-700 font-medium px-3 py-1 rounded-lg hover:bg-red-50 transition";
+      btn.textContent = "Remove";
+      btn.dataset.email = email;
+      btn.dataset.action = "remove-email";
+
+      li.appendChild(span);
+      li.appendChild(btn);
       list.appendChild(li);
       showMsg("Email added.", true);
     }
@@ -102,6 +110,11 @@
       });
       showMsg("Email removed.", true);
     }
+
+    document.getElementById("email-list").addEventListener("click", function(e) {
+      const btn = e.target.closest("[data-action='remove-email']");
+      if (btn) removeEmail(btn.dataset.email);
+    });
   </script>
 </body>
 </html>

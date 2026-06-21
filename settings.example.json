@@ -20,9 +20,8 @@
     },
     "storefront": {
         "session_secret": "",
-        "https": false,
+        "https": true,
         "admin": {
-            "enabled": false,
             "emails": [
                 "you@example.com"
             ]

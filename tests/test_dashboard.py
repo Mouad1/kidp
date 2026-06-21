@@ -64,6 +64,8 @@ def client(tmp_path, monkeypatch):
 
     monkeypatch.setattr(cio, "ROOT", tmp_path)
     monkeypatch.setattr(app_module, "ROOT", tmp_path)
+    monkeypatch.setattr(app_module, "_require_admin",
+                        lambda request: {"email": "local-admin", "admin": True})
 
     # Coloring book
     book1_dir = tmp_path / "books" / "book1-90s"
@@ -86,32 +88,33 @@ def client(tmp_path, monkeypatch):
 
 # ── Index page ─────────────────────────────────────────────────────────────────
 
-def test_index_returns_200(client):
-    res = client.get("/")
-    assert res.status_code == 200
+def test_index_redirects_to_store(client):
+    res = client.get("/", follow_redirects=False)
+    assert res.status_code == 302
+    assert res.headers["location"] == "/store"
 
 
-def test_index_contains_story_section_header(client):
-    res = client.get("/")
+def test_admin_index_contains_story_section_header(client):
+    res = client.get("/admin")
     assert "Story Books" in res.text
 
 
-def test_index_contains_coloring_section_header(client):
-    res = client.get("/")
+def test_admin_index_contains_coloring_section_header(client):
+    res = client.get("/admin")
     assert "Coloring Books" in res.text
 
 
-def test_index_story_section_appears_before_coloring(client):
+def test_admin_index_story_section_appears_before_coloring(client):
     """Story Books header must appear before Coloring Books header."""
-    res = client.get("/")
+    res = client.get("/admin")
     story_pos = res.text.find("Story Books")
     coloring_pos = res.text.find("Coloring Books")
     assert story_pos != -1 and coloring_pos != -1
     assert story_pos < coloring_pos
 
 
-def test_index_shows_book_titles(client):
-    res = client.get("/")
+def test_admin_index_shows_book_titles(client):
+    res = client.get("/admin")
     assert "90s Legends" in res.text
     assert "Baba &amp; Joudia" in res.text or "Baba & Joudia" in res.text
 

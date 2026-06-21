@@ -147,7 +147,6 @@ def test_checkout_rejects_other_users_order(store_env):
 
 
 def test_admin_orders_lists_paid(store_env, monkeypatch):
-    monkeypatch.setattr(appmod, "_admin_enabled", lambda: True)
     monkeypatch.setattr(appmod, "_require_admin", lambda request: {"email": "admin", "admin": True})
     _login()
     _create_order(child="Lina")

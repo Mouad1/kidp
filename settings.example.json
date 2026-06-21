@@ -22,7 +22,6 @@
         "session_secret": "",
         "https": true,
         "admin": {
-            "enabled": true,
             "emails": [
                 "you@example.com"
             ]

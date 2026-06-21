@@ -1490,13 +1490,13 @@ def store_catalog(request: Request):
     lang = _sf_i18n.resolve_language(request)
     entries = _sf_list_catalog(_store_catalog_names(), _store_read_config)
     supported = _sf_i18n.load_supported_languages()
+    fallback = _sf_i18n.get_strings(lang).get("catalog_subtitle", "")
     view = []
     for e in entries:
         cfg = _store_read_config(e.slug)
         book_languages = cfg.get("languages") or ["fr"]
         quote = _store_price_quote(e.page_count)
         cover_url = f"/images/{e.slug}/{e.slug}_page_1.png"
-        fallback = _sf_i18n.get_strings(lang).get("catalog_subtitle", "")
         view.append({
             "slug": e.slug,
             "title": e.title,

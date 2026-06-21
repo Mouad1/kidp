@@ -29,7 +29,9 @@ def list_admins(db: Database) -> list[dict]:
     return [{"email": row["email"], "created_at": row["created_at"]} for row in rows]
 
 
-def remove_admin(db: Database, email: str) -> None:
+def remove_admin(db: Database, email: str) -> bool:
     normalized = (email or "").strip().lower()
-    if normalized:
-        db.execute("DELETE FROM admins WHERE email = ?", (normalized,))
+    if not normalized:
+        return False
+    cur = db.execute("DELETE FROM admins WHERE email = ?", (normalized,))
+    return cur.rowcount > 0

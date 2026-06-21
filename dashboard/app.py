@@ -1476,13 +1476,18 @@ def store_set_language(request: Request, lang: str = Form(...), next: str = Form
 
 def _resolve_intro_text(intro_text, lang: str, fallback: str) -> str:
     """Resolve intro_text (dict or str) to a display string for the given language."""
-    if isinstance(intro_text, dict):
-        return (intro_text.get(lang)
-                or intro_text.get("fr")
-                or next(iter(intro_text.values()), "")
-                or fallback)
-    if isinstance(intro_text, str) and intro_text.strip():
-        return intro_text.strip()
+    if isinstance(intro_text, str):
+        return intro_text.strip() or fallback
+    if not isinstance(intro_text, dict):
+        return fallback
+    # Prefer exact lang match if non-empty, then any non-empty value, then fallback
+    val = intro_text.get(lang)
+    if val:
+        return val
+    # Try any non-empty value in insertion order
+    for v in intro_text.values():
+        if v:
+            return v
     return fallback
 
 
@@ -2083,8 +2088,9 @@ def admin_stats(request: Request):
 
 @app.get("/api/admin/emails")
 def admin_list_emails(request: Request):
-    if _require_admin(request) is None:
-        raise HTTPException(status_code=401, detail="Admin sign in required.")
+    admin = _require_admin(request)
+    if admin is None or admin.get("email") == "local-admin":
+        raise HTTPException(status_code=401, detail="Authentication required.")
     rows = _sf_list_admins(_store_db())
     return {"emails": rows}
 
@@ -2095,23 +2101,32 @@ class AdminEmailModel(BaseModel):
 
 @app.post("/api/admin/emails")
 def admin_add_email(request: Request, data: AdminEmailModel):
-    if _require_admin(request) is None:
-        raise HTTPException(status_code=401, detail="Admin sign in required.")
+    admin = _require_admin(request)
+    if admin is None or admin.get("email") == "local-admin":
+        raise HTTPException(status_code=401, detail="Authentication required.")
     normalized = (data.email or "").strip().lower()
     if not re.match(r"^[^@\s]+@[^@\s]+\.[^@\s]+$", normalized):
         raise HTTPException(status_code=400, detail="Invalid email address.")
+    if _sf_is_admin(_store_db(), normalized):
+        raise HTTPException(status_code=409, detail="Email already an admin.")
     _sf_seed_admins(_store_db(), [normalized], now=_dt.datetime.utcnow())
     return {"added": True, "email": normalized}
 
 
 @app.delete("/api/admin/emails/{email}")
 def admin_remove_email(email: str, request: Request):
-    if _require_admin(request) is None:
-        raise HTTPException(status_code=401, detail="Admin sign in required.")
+    admin = _require_admin(request)
+    if admin is None or admin.get("email") == "local-admin":
+        raise HTTPException(status_code=401, detail="Authentication required.")
     normalized = (email or "").strip().lower()
     if not normalized:
         raise HTTPException(status_code=400, detail="Invalid email.")
-    _sf_remove_admin(_store_db(), normalized)
+    remaining = _sf_list_admins(_store_db())
+    if len(remaining) <= 1:
+        raise HTTPException(status_code=400, detail="Cannot remove the last admin.")
+    removed = _sf_remove_admin(_store_db(), normalized)
+    if not removed:
+        raise HTTPException(status_code=404, detail="Email not found in admins.")
     return {"removed": True, "email": normalized}
 
 

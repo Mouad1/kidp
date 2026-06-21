@@ -346,7 +346,8 @@ def test_admin_remove_email(store_env, monkeypatch):
     monkeypatch.setattr(appmod, "_require_admin", lambda request: {"email": "admin", "admin": True})
     from storefront.admin import seed_admins
     import datetime as dt
-    seed_admins(store_env["db"], ["todelete@example.com"], now=dt.datetime.utcnow())
+    # Seed two admins so last-admin guard doesn't block the delete
+    seed_admins(store_env["db"], ["keeper@example.com", "todelete@example.com"], now=dt.datetime.utcnow())
     r = client.delete("/api/admin/emails/todelete@example.com")
     assert r.status_code == 200
     assert not appmod._sf_is_admin(store_env["db"], "todelete@example.com")

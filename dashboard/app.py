@@ -317,6 +317,11 @@ def delete_book(book_name: str):
 
 @app.get("/", response_class=HTMLResponse)
 async def index(request: Request):
+    return RedirectResponse(url="/store", status_code=302)
+
+
+@app.get("/admin", response_class=HTMLResponse)
+async def admin_index(request: Request):
     if _require_admin(request) is None:
         return RedirectResponse(url="/admin/login", status_code=303)
     books = [_book_status(b) for b in _list_books()]
@@ -1310,8 +1315,6 @@ def _store_https() -> bool:
     return bool(_load_storefront_settings().get("https", False))
 
 
-def _admin_enabled() -> bool:
-    return bool((_load_storefront_settings().get("admin") or {}).get("enabled", False))
 
 
 def _store_session_secret() -> str:
@@ -1862,9 +1865,7 @@ async def stripe_webhook(request: Request):
 # ── Admin authentication (email allowlist + one-time code) ───────────────────────
 
 def _require_admin(request: Request) -> dict | None:
-    """Return admin session dict, or None. When admin auth is disabled, allow all."""
-    if not _admin_enabled():
-        return {"email": "local-admin", "admin": True}
+    """Return admin session dict, or None."""
     token = request.cookies.get("sf_admin")
     if not token:
         return None

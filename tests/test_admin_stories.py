@@ -39,8 +39,7 @@ def _login_admin():
     client.cookies.set("sf_admin", _admin_cookie())
 
 
-def test_admin_stories_redirects_without_session(stories_env, monkeypatch):
-    monkeypatch.setattr(appmod, "_admin_enabled", lambda: True)
+def test_admin_stories_redirects_without_session(stories_env):
     r = client.get("/admin/stories", follow_redirects=False)
     assert r.status_code == 303
     assert r.headers["location"] == "/admin/login"

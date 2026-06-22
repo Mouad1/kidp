@@ -57,7 +57,8 @@ from storefront.db import (
     set_order_status as _sf_set_order_status, list_orders as _sf_list_orders,
     set_order_notes as _sf_set_order_notes, get_stats as _sf_get_stats,
 )
-from storefront.admin import seed_admins as _sf_seed_admins, is_admin as _sf_is_admin
+from storefront.admin import seed_admins as _sf_seed_admins, is_admin as _sf_is_admin, \
+    list_admins as _sf_list_admins, remove_admin as _sf_remove_admin
 from storefront import i18n as _sf_i18n
 
 ROOT = pathlib.Path(__file__).parent.parent
@@ -1476,11 +1477,29 @@ def store_set_language(request: Request, lang: str = Form(...), next: str = Form
     return resp
 
 
+def _resolve_intro_text(intro_text, lang: str, fallback: str) -> str:
+    """Resolve intro_text (dict or str) to a display string for the given language."""
+    if isinstance(intro_text, str):
+        return intro_text.strip() or fallback
+    if not isinstance(intro_text, dict):
+        return fallback
+    # Prefer exact lang match if non-empty, then any non-empty value, then fallback
+    val = intro_text.get(lang)
+    if val:
+        return val
+    # Try any non-empty value in insertion order
+    for v in intro_text.values():
+        if v:
+            return v
+    return fallback
+
+
 @app.get("/store", response_class=HTMLResponse)
 def store_catalog(request: Request):
     lang = _sf_i18n.resolve_language(request)
     entries = _sf_list_catalog(_store_catalog_names(), _store_read_config)
     supported = _sf_i18n.load_supported_languages()
+    fallback = _sf_i18n.get_strings(lang).get("catalog_subtitle", "")
     view = []
     for e in entries:
         cfg = _store_read_config(e.slug)
@@ -1496,6 +1515,9 @@ def store_catalog(request: Request):
             "languages": book_languages,
             "all_languages": supported,
             "intro_text": cfg.get("intro_text", ""),
+            "intro_text_display": _resolve_intro_text(
+                cfg.get("intro_text", ""), lang, fallback
+            ),
             "cover_url": cover_url,
         })
     return templates.TemplateResponse(
@@ -2063,6 +2085,61 @@ def admin_stats(request: Request):
         month_prefix=now.strftime("%Y-%m"),
     )
     return stats
+
+
+@app.get("/api/admin/emails")
+def admin_list_emails(request: Request):
+    admin = _require_admin(request)
+    if admin is None or admin.get("email") == "local-admin":
+        raise HTTPException(status_code=401, detail="Authentication required.")
+    rows = _sf_list_admins(_store_db())
+    return {"emails": rows}
+
+
+class AdminEmailModel(BaseModel):
+    email: str
+
+
+@app.post("/api/admin/emails")
+def admin_add_email(request: Request, data: AdminEmailModel):
+    admin = _require_admin(request)
+    if admin is None or admin.get("email") == "local-admin":
+        raise HTTPException(status_code=401, detail="Authentication required.")
+    normalized = (data.email or "").strip().lower()
+    if not re.match(r"^[^@\s]+@[^@\s]+\.[^@\s]+$", normalized):
+        raise HTTPException(status_code=400, detail="Invalid email address.")
+    if _sf_is_admin(_store_db(), normalized):
+        raise HTTPException(status_code=409, detail="Email already an admin.")
+    _sf_seed_admins(_store_db(), [normalized], now=_dt.datetime.utcnow())
+    return {"added": True, "email": normalized}
+
+
+@app.delete("/api/admin/emails/{email}")
+def admin_remove_email(email: str, request: Request):
+    admin = _require_admin(request)
+    if admin is None or admin.get("email") == "local-admin":
+        raise HTTPException(status_code=401, detail="Authentication required.")
+    normalized = (email or "").strip().lower()
+    if not normalized:
+        raise HTTPException(status_code=400, detail="Invalid email.")
+    remaining = _sf_list_admins(_store_db())
+    if len(remaining) <= 1:
+        raise HTTPException(status_code=400, detail="Cannot remove the last admin.")
+    removed = _sf_remove_admin(_store_db(), normalized)
+    if not removed:
+        raise HTTPException(status_code=404, detail="Email not found in admins.")
+    return {"removed": True, "email": normalized}
+
+
+@app.get("/admin/settings", response_class=HTMLResponse)
+def admin_settings_page(request: Request):
+    if _require_admin(request) is None:
+        return RedirectResponse(url="/admin/login", status_code=303)
+    emails = _sf_list_admins(_store_db())
+    return templates.TemplateResponse(
+        request=request, name="admin_settings.html",
+        context={"emails": emails},
+    )
 
 
 @app.post("/api/storyforge")

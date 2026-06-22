@@ -74,6 +74,14 @@ def test_catalog_lists_only_published(store_env):
     assert "$3.20" in r.text
 
 
+def test_catalog_shows_intro_text(store_env):
+    catalog = store_env["catalog"]
+    catalog["alpha"]["intro_text"] = {"fr": "Une histoire magique.", "en": "A magical story."}
+    r = client.get("/store", headers={"Accept-Language": "fr"})
+    assert r.status_code == 200
+    assert "Une histoire magique." in r.text
+
+
 def test_personalize_published_ok(store_env):
     r = client.get("/store/alpha")
     assert r.status_code == 200
@@ -312,4 +320,41 @@ def test_preview_unpublished_404(preview_env):
         files={"photo": ("p.png", _png_bytes(), "image/png")},
     )
     assert r.status_code == 404
+
+
+def test_admin_list_emails_returns_list(store_env, monkeypatch):
+    monkeypatch.setattr(appmod, "_require_admin", lambda request: {"email": "admin", "admin": True})
+    from storefront.admin import seed_admins
+    import datetime as dt
+    seed_admins(store_env["db"], ["test@example.com"], now=dt.datetime.utcnow())
+    r = client.get("/api/admin/emails")
+    assert r.status_code == 200
+    emails = [e["email"] for e in r.json()["emails"]]
+    assert "test@example.com" in emails
+
+
+def test_admin_add_email(store_env, monkeypatch):
+    monkeypatch.setattr(appmod, "_require_admin", lambda request: {"email": "admin", "admin": True})
+    r = client.post("/api/admin/emails", json={"email": "new@example.com"})
+    assert r.status_code == 200
+    assert r.json()["added"] is True
+    assert appmod._sf_is_admin(store_env["db"], "new@example.com")
+
+
+def test_admin_remove_email(store_env, monkeypatch):
+    monkeypatch.setattr(appmod, "_require_admin", lambda request: {"email": "admin", "admin": True})
+    from storefront.admin import seed_admins
+    import datetime as dt
+    # Seed two admins so last-admin guard doesn't block the delete
+    seed_admins(store_env["db"], ["keeper@example.com", "todelete@example.com"], now=dt.datetime.utcnow())
+    r = client.delete("/api/admin/emails/todelete@example.com")
+    assert r.status_code == 200
+    assert not appmod._sf_is_admin(store_env["db"], "todelete@example.com")
+
+
+def test_admin_email_endpoints_require_auth(store_env, monkeypatch):
+    monkeypatch.setattr(appmod, "_require_admin", lambda request: None)
+    assert client.get("/api/admin/emails").status_code == 401
+    assert client.post("/api/admin/emails", json={"email": "x@y.com"}).status_code == 401
+    assert client.delete("/api/admin/emails/x@y.com").status_code == 401
 

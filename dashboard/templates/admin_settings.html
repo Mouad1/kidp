@@ -1,0 +1,120 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Admin Settings</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-gray-100 text-gray-900 min-h-screen">
+  <div class="max-w-2xl mx-auto px-6 py-10">
+
+    <div class="mb-6">
+      <a href="/admin" class="text-indigo-600 hover:text-indigo-800 text-sm">← Dashboard</a>
+    </div>
+
+    <h1 class="text-2xl font-bold mb-8">Settings</h1>
+
+    <!-- Admin Emails -->
+    <div class="bg-white rounded-xl border border-gray-200 shadow-sm p-6">
+      <h2 class="text-lg font-semibold mb-1">Admin Emails</h2>
+      <p class="text-sm text-gray-500 mb-5">
+        These emails can sign in to the admin dashboard via one-time code.
+        Removing an email revokes access immediately.
+      </p>
+
+      <ul id="email-list" class="divide-y divide-gray-100 mb-6">
+        {% for row in emails %}
+        <li class="flex items-center justify-between py-3">
+          <span class="text-sm font-medium text-gray-800">{{ row.email }}</span>
+          <button data-email="{{ row.email }}" data-action="remove-email"
+                  class="text-xs text-red-500 hover:text-red-700 font-medium px-3 py-1 rounded-lg hover:bg-red-50 transition">
+            Remove
+          </button>
+        </li>
+        {% else %}
+        <li class="py-3 text-sm text-gray-400" id="empty-state">No admin emails configured.</li>
+        {% endfor %}
+      </ul>
+
+      <div class="flex gap-3">
+        <input id="new-email" type="email" placeholder="new@example.com"
+               class="flex-1 border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500" />
+        <button onclick="addEmail()"
+                class="bg-gray-900 text-white text-sm font-medium px-4 py-2 rounded-lg hover:bg-gray-700 transition">
+          Add
+        </button>
+      </div>
+      <p id="msg" class="text-sm text-red-600 mt-3 hidden"></p>
+    </div>
+
+  </div>
+
+  <script>
+    function showMsg(text, ok = false) {
+      const el = document.getElementById("msg");
+      el.textContent = text;
+      el.className = `text-sm mt-3 ${ok ? "text-green-600" : "text-red-600"}`;
+      el.classList.remove("hidden");
+      setTimeout(() => el.classList.add("hidden"), 3000);
+    }
+
+    async function addEmail() {
+      const input = document.getElementById("new-email");
+      const email = input.value.trim();
+      if (!email) return;
+      const r = await fetch("/api/admin/emails", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email }),
+      });
+      if (!r.ok) {
+        const d = await r.json().catch(() => ({}));
+        showMsg(d.detail || "Failed to add email.");
+        return;
+      }
+      input.value = "";
+      const list = document.getElementById("email-list");
+      const empty = document.getElementById("empty-state");
+      if (empty) empty.remove();
+      const li = document.createElement("li");
+      li.className = "flex items-center justify-between py-3";
+
+      const span = document.createElement("span");
+      span.className = "text-sm font-medium text-gray-800";
+      span.textContent = email;
+
+      const btn = document.createElement("button");
+      btn.type = "button";
+      btn.className = "text-xs text-red-500 hover:text-red-700 font-medium px-3 py-1 rounded-lg hover:bg-red-50 transition";
+      btn.textContent = "Remove";
+      btn.dataset.email = email;
+      btn.dataset.action = "remove-email";
+
+      li.appendChild(span);
+      li.appendChild(btn);
+      list.appendChild(li);
+      showMsg("Email added.", true);
+    }
+
+    async function removeEmail(email) {
+      if (!confirm(`Remove ${email}?`)) return;
+      const r = await fetch(`/api/admin/emails/${encodeURIComponent(email)}`, { method: "DELETE" });
+      if (!r.ok) {
+        const d = await r.json().catch(() => ({}));
+        showMsg(d.detail || "Failed to remove email.");
+        return;
+      }
+      document.querySelectorAll("#email-list li").forEach(li => {
+        if (li.querySelector("span")?.textContent.trim() === email) li.remove();
+      });
+      showMsg("Email removed.", true);
+    }
+
+    document.getElementById("email-list").addEventListener("click", function(e) {
+      const btn = e.target.closest("[data-action='remove-email']");
+      if (btn) removeEmail(btn.dataset.email);
+    });
+  </script>
+</body>
+</html>

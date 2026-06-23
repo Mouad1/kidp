@@ -85,6 +85,33 @@ def load_template(slug: str) -> Template:
     return validate_template(parse_template(data, slug=slug))
 
 
+def load_template_pages(slug: str) -> list[bytes | None]:
+    """Return pre-rendered canonical page images for a template.
+
+    Returns a list parallel to Template.pages. Each entry is the PNG bytes of
+    the canonical illustration, or None if that page hasn't been rendered yet.
+    Images are stored at templates/{slug}/pages/page_{i}.png (0-indexed).
+    """
+    if not re.fullmatch(r"[a-z0-9][a-z0-9-]*[a-z0-9]", slug):
+        raise TemplateError(f"Invalid template slug: {slug!r}")
+    pages_dir = TEMPLATES_DIR / slug / "pages"
+    tpl = load_template(slug)
+    out: list[bytes | None] = []
+    for i in range(len(tpl.pages)):
+        path = pages_dir / f"page_{i}.png"
+        out.append(path.read_bytes() if path.exists() else None)
+    return out
+
+
+def save_template_page(slug: str, index: int, png: bytes) -> None:
+    """Persist a canonical page image for a template."""
+    if not re.fullmatch(r"[a-z0-9][a-z0-9-]*[a-z0-9]", slug):
+        raise TemplateError(f"Invalid template slug: {slug!r}")
+    pages_dir = TEMPLATES_DIR / slug / "pages"
+    pages_dir.mkdir(parents=True, exist_ok=True)
+    (pages_dir / f"page_{index}.png").write_bytes(png)
+
+
 def list_templates() -> list[Template]:
     if not TEMPLATES_DIR.exists():
         return []

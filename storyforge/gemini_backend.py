@@ -7,7 +7,7 @@ except ImportError:  # pragma: no cover
     genai = None
     genai_types = None
 
-IMAGE_MODEL = "gemini-2.5-flash-image"
+IMAGE_MODEL = "gemini-3.1-flash-image"
 TEXT_MODEL = "gemini-2.5-flash"
 
 

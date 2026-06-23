@@ -1,7 +1,7 @@
 {
     "gemini_api_key": "",
     "text_model": "gemini-2.5-flash",
-    "image_model": "imagen-4.0-generate-001",
+    "image_model": "gemini-3.1-flash-image",
     "target_languages": "fr,en,es,ar",
     "concurrency_limit": 2,
     "default_width": 8.5,

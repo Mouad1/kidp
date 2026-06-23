@@ -20,8 +20,8 @@ def test_generate_returns_inline_image_bytes(monkeypatch):
             return _FakeResp(b"PNGDATA")
 
     backend._client = type("Client", (), {"models": _Models()})()
-    backend._image_model = "gemini-2.5-flash-image"
+    backend._image_model = "gemini-3.1-flash-image"
 
     out = backend.generate("draw a hero", reference_images=[b"ref"])
     assert out == b"PNGDATA"
-    assert _Models.captured["model"] == "gemini-2.5-flash-image"
+    assert _Models.captured["model"] == "gemini-3.1-flash-image"

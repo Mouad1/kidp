@@ -21,7 +21,11 @@ def resolve(template: Template, variables: dict[str, str], hero: CharacterSheet)
 
     text_mapping = dict(variables)
     image_mapping = dict(variables)
-    image_mapping["HERO"] = hero.descriptor
+    # Don't inject the raw physical descriptor — the canonical portrait (reference image)
+    # handles visual likeness. A text descriptor of an adult overrides the story's
+    # character age and breaks scene integrity.
+    hero_label = variables.get("HERO_NAME") or "the main hero"
+    image_mapping["HERO"] = f"the young hero named {hero_label}"
 
     specs: list[PageSpec] = []
     for i, page in enumerate(template.pages, start=1):

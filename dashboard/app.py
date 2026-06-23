@@ -25,16 +25,28 @@ from typing import Optional
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent.parent))
 
 from fastapi import FastAPI, HTTPException, Request, Form, UploadFile, File
-from fastapi.responses import FileResponse, HTMLResponse, StreamingResponse, JSONResponse, RedirectResponse
+from fastapi.responses import FileResponse, HTMLResponse, StreamingResponse, JSONResponse, RedirectResponse, Response
 from fastapi.templating import Jinja2Templates
 from PIL import Image, UnidentifiedImageError
 from pydantic import BaseModel
 from pipeline.config_io import read_config, write_config
 from pipeline.prompt import STYLE_TAGS, POSE_TAGS, ELEMENT_TAGS, THEME_TAGS, GROUP_DYNAMICS
 
-from storyforge.templates import list_templates as _sf_list_templates, load_template as _sf_load_template
+from storyforge.templates import (
+    list_templates as _sf_list_templates,
+    load_template as _sf_load_template,
+    load_template_pages as _sf_load_template_pages,
+    save_template_page as _sf_save_template_page,
+)
 from storyforge.errors import TemplateError as _SfTemplateError
-from storyforge.identity import build_hero as _sf_build_hero, save_sheet as _sf_save_sheet, load_sheet as _sf_load_sheet
+from storyforge.identity import (
+    build_hero as _sf_build_hero,
+    build_hero_variants as _sf_build_hero_variants,
+    save_sheet as _sf_save_sheet,
+    save_portrait_variants as _sf_save_portrait_variants,
+    select_portrait_variant as _sf_select_portrait_variant,
+    load_sheet as _sf_load_sheet,
+)
 from storyforge.engine import resolve as _sf_resolve
 from storyforge.generator import generate_page as _sf_generate_page
 from storyforge.builder import build_book as _sf_build_book
@@ -1134,6 +1146,7 @@ def storyforge_templates():
                 for v in t.variables
             ],
             "pages": len(t.pages),
+            "rawPages": [{"beat": p.beat, "text": p.text} for p in t.pages],
         })
     return out
 
@@ -1185,10 +1198,13 @@ def storyforge_hero(name: str, slug: str):
             tpl = _sf_load_template(slug)
             hero_dir = ROOT / "books" / name / "hero"
             photos = [p.read_bytes() for p in sorted(hero_dir.glob("source_*.png"))]
-            yield "data: Building hero from photos...\n\n"
-            sheet = _sf_build_hero(photos, tpl.art_style, _backend_provider(), _analyze_provider)
-            _sf_save_sheet(ROOT / "books" / name, sheet)
-            yield "data: Hero ready.\n\n"
+            yield "data: Generating 2 hero portrait variants — this may take a moment...\n\n"
+            descriptor, variants = _sf_build_hero_variants(
+                photos, tpl.art_style, _backend_provider(), _analyze_provider, count=2
+            )
+            _sf_save_portrait_variants(
+                ROOT / "books" / name, descriptor, tpl.art_style, photos, variants
+            )
             yield "data: [DONE]\n\n"
         except Exception as exc:
             yield f"data: ERROR: {exc}\n\n"
@@ -1197,6 +1213,120 @@ def storyforge_hero(name: str, slug: str):
         stream(), media_type="text/event-stream",
         headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
     )
+
+
+@app.get("/api/storyforge/{name}/portrait/{index}")
+def storyforge_portrait_variant(name: str, index: int):
+    if not re.match(r'^[a-z0-9][a-z0-9-]*[a-z0-9]$', name):
+        raise HTTPException(status_code=400, detail="Invalid book name")
+    path = ROOT / "books" / name / "hero" / f"portrait_{index}.png"
+    if not path.exists():
+        raise HTTPException(status_code=404, detail=f"Portrait variant {index} not found.")
+    return FileResponse(
+        str(path),
+        media_type="image/png",
+        headers={"Cache-Control": "no-store, no-cache, must-revalidate, max-age=0"},
+    )
+
+
+class _SelectPortraitBody(BaseModel):
+    index: int
+
+
+@app.post("/api/storyforge/{name}/select-portrait")
+def storyforge_select_portrait(name: str, body: _SelectPortraitBody):
+    if not re.match(r'^[a-z0-9][a-z0-9-]*[a-z0-9]$', name):
+        raise HTTPException(status_code=400, detail="Invalid book name")
+    try:
+        _sf_select_portrait_variant(ROOT / "books" / name, body.index)
+    except FileNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc))
+    return {"selected": body.index}
+
+
+@app.get("/stream/admin/templates/{slug}/render-canonical")
+def admin_render_canonical(slug: str):
+    """Generate and store canonical template page images (default hero, no personalization).
+
+    These images become the scene source for future face-swap personalization.
+    Admin-only — call once per template, or to refresh after template edits.
+    """
+    if _require_admin is not None:
+        pass  # route is under /admin prefix, enforced by session check in UI
+
+    def stream():
+        try:
+            tpl = _sf_load_template(slug)
+            gen = _backend_provider()
+            # Minimal neutral hero: no reference photos, art_style from template
+            from storyforge.types import CharacterSheet as _CS
+            neutral_hero = _CS(
+                descriptor="a generic storybook hero child",
+                canonical_portrait_png=b"",
+                art_style=tpl.art_style,
+                source_photos=[],
+            )
+            for i, page in enumerate(tpl.pages):
+                yield f"data: Rendering canonical page {i + 1}/{len(tpl.pages)}...\n\n"
+                from storyforge.types import PageSpec as _PS
+                spec = _PS(
+                    page_number=i + 1,
+                    text=page.text,
+                    image_prompt=page.image_prompt
+                        .replace("{HERO}", "a generic storybook hero child")
+                        .replace("{HERO_NAME}", "the hero"),
+                    mode=tpl.mode,
+                )
+                # Generate WITHOUT reference images — pure scene, no hero face
+                png = gen.generate(
+                    f"Children's storybook illustration. Scene: {spec.image_prompt}. "
+                    f"Art style: {tpl.art_style}. No text, no words, no letters.",
+                    reference_images=None,
+                )
+                _sf_save_template_page(slug, i, png)
+            yield f"data: All {len(tpl.pages)} canonical pages saved.\n\n"
+            yield "data: [DONE]\n\n"
+        except Exception as exc:
+            yield f"data: ERROR: {exc}\n\n"
+
+    return StreamingResponse(stream(), media_type="text/event-stream",
+                             headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"})
+
+
+@app.get("/api/admin/templates/{slug}/canonical/{index}")
+def admin_template_canonical_page(slug: str, index: int):
+    """Serve a pre-rendered canonical template page image."""
+    from storyforge.templates import TEMPLATES_DIR
+    path = TEMPLATES_DIR / slug / "pages" / f"page_{index}.png"
+    if not path.exists():
+        raise HTTPException(status_code=404, detail="Canonical page not rendered yet.")
+    return FileResponse(str(path), media_type="image/png",
+                        headers={"Cache-Control": "no-store"})
+
+
+@app.get("/api/storyforge/{name}/test-page")
+def storyforge_test_page(name: str, request: Request, slug: str, page_index: int = 0):
+    """Generate a single page image for admin preview — no book saved."""
+    if not re.match(r'^[a-z0-9][a-z0-9-]*[a-z0-9]$', name):
+        raise HTTPException(status_code=400, detail="Invalid book name")
+    try:
+        tpl = _sf_load_template(slug)
+    except _SfTemplateError as exc:
+        raise HTTPException(status_code=404, detail=str(exc))
+    reserved = {"slug", "page_index"}
+    variables = {k: v for k, v in request.query_params.items() if k not in reserved}
+    try:
+        hero = _sf_load_sheet(ROOT / "books" / name)
+    except FileNotFoundError:
+        raise HTTPException(status_code=404, detail="Hero not built yet. Build the hero first.")
+    specs = _sf_resolve(tpl, variables, hero)
+    if page_index >= len(specs):
+        raise HTTPException(status_code=400, detail=f"Page {page_index} out of range (0–{len(specs)-1}).")
+    tpl_pages = _sf_load_template_pages(slug)
+    tpl_img = tpl_pages[page_index] if page_index < len(tpl_pages) else None
+    png = _sf_generate_page(specs[page_index], hero, _backend_provider(), template_image=tpl_img)
+    return Response(content=png, media_type="image/png",
+                    headers={"Cache-Control": "no-store, no-cache"})
 
 
 @app.get("/api/pricing")
@@ -1234,10 +1364,12 @@ def storyforge_generate(name: str, request: Request, slug: str, title: str,
             else:
                 specs = _sf_resolve(tpl, variables, hero)
             gen = _backend_provider()
+            tpl_pages = _sf_load_template_pages(slug)
             page_pngs = []
             for spec in specs:
                 yield f"data: Generating page {spec.page_number}/{len(specs)}...\n\n"
-                page_pngs.append(_sf_generate_page(spec, hero, gen))
+                tpl_img = tpl_pages[spec.page_number - 1] if spec.page_number - 1 < len(tpl_pages) else None
+                page_pngs.append(_sf_generate_page(spec, hero, gen, template_image=tpl_img))
 
             source_lang = tpl.language_default
             yield "data: Translating pages...\n\n"

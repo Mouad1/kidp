@@ -7,7 +7,7 @@ except ImportError:  # pragma: no cover
     genai = None
     genai_types = None
 
-IMAGE_MODEL = "gemini-2.5-flash-image"
+IMAGE_MODEL = "gemini-3.1-flash-image"
 TEXT_MODEL = "gemini-2.5-flash"
 
 
@@ -23,8 +23,23 @@ class GeminiBackend:
         self._client = genai.Client(api_key=key)
         self._image_model = image_model
 
-    def generate(self, prompt: str, reference_images: list[bytes] | None = None) -> bytes:
-        contents = [prompt]
+    def generate(
+        self,
+        prompt: str,
+        reference_images: list[bytes] | None = None,
+        preamble_images: list[bytes] | None = None,
+    ) -> bytes:
+        """Generate an image from prompt + optional reference images.
+
+        preamble_images are placed BEFORE the prompt text — use for image
+        editing tasks where the model must receive the source image first.
+        reference_images are placed after the prompt (style/face references).
+        """
+        contents = []
+        if preamble_images:
+            for img in preamble_images:
+                contents.append(genai_types.Part.from_bytes(data=img, mime_type="image/png"))
+        contents.append(prompt)
         if reference_images:
             for img in reference_images:
                 contents.append(

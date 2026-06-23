@@ -25,6 +25,12 @@ settings.json
 # Storefront runtime auth store (one-time codes)
 .storefront/
 
+# User-generated books (runtime data, not source)
+books/
+
+# Pre-rendered canonical template page images (regenerated via admin UI)
+templates/*/pages/
+
 # Node
 node_modules/
 

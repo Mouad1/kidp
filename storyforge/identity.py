@@ -39,6 +39,55 @@ def build_hero(photos, art_style, gen: ImageGenerator, analyze) -> CharacterShee
     )
 
 
+def build_hero_variants(
+    photos, art_style, gen: ImageGenerator, analyze, count: int = 2
+) -> tuple[str, list[bytes]]:
+    """Generate `count` portrait variants from the same photos.
+
+    Returns (descriptor, [portrait_bytes_0, portrait_bytes_1, ...]).
+    The descriptor is derived once; all variants share it.
+    """
+    validate_photos(photos)
+    descriptor = analyze(photos)
+    prompt = _PORTRAIT_PROMPT.format(art_style=art_style)
+    variants = [
+        gen.generate(prompt, reference_images=list(photos))
+        for _ in range(count)
+    ]
+    return descriptor, variants
+
+
+def save_portrait_variants(
+    book_dir,
+    descriptor: str,
+    art_style: str,
+    source_photos: list[bytes],
+    variants: list[bytes],
+) -> None:
+    """Persist portrait variants without committing a canonical portrait.
+
+    Saves portrait_0.png, portrait_1.png, … plus descriptor/art_style/source photos.
+    Call select_portrait_variant afterwards to promote one to canonical_portrait.png.
+    """
+    hero_dir = Path(book_dir) / "hero"
+    hero_dir.mkdir(parents=True, exist_ok=True)
+    (hero_dir / "descriptor.txt").write_text(descriptor, encoding="utf-8")
+    (hero_dir / "art_style.txt").write_text(art_style, encoding="utf-8")
+    for i, photo in enumerate(source_photos):
+        (hero_dir / f"source_{i}.png").write_bytes(photo)
+    for i, variant in enumerate(variants):
+        (hero_dir / f"portrait_{i}.png").write_bytes(variant)
+
+
+def select_portrait_variant(book_dir, index: int) -> None:
+    """Promote portrait_{index}.png to canonical_portrait.png."""
+    hero_dir = Path(book_dir) / "hero"
+    src = hero_dir / f"portrait_{index}.png"
+    if not src.exists():
+        raise FileNotFoundError(f"Portrait variant {index} not found.")
+    (hero_dir / "canonical_portrait.png").write_bytes(src.read_bytes())
+
+
 def save_sheet(book_dir, sheet: CharacterSheet) -> None:
     hero_dir = Path(book_dir) / "hero"
     hero_dir.mkdir(parents=True, exist_ok=True)

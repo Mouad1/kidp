@@ -9,12 +9,41 @@ _LINEART_DIRECTIVE = (
 )
 
 
-def _build_prompt(spec: PageSpec, hero: CharacterSheet) -> str:
+_SCENE_GUIDED_PROMPT = (
+    "Children's storybook illustration. "
+    "Reference image 1 is the scene template: recreate the SAME background, composition, "
+    "lighting, secondary characters, props, and setting — but generate the scene fresh so "
+    "the hero's appearance is guided by the portrait in the remaining reference images. "
+    "Art style: {art_style}. No text, no letters."
+)
+
+_GENERATION_PROMPT = (
+    "Children's storybook illustration. "
+    "Scene: {scene}. "
+    "Art style: {art_style}. "
+    "The hero's appearance must match the portrait reference photo. "
+    "No text, no words, no letters."
+)
+
+
+def generate_page(
+    spec: PageSpec,
+    hero: CharacterSheet,
+    gen: ImageGenerator,
+    template_image: bytes | None = None,
+) -> bytes:
+    if template_image is not None:
+        # Scene-guided mode: template image is the FIRST reference so Gemini uses it
+        # for scene composition, while portrait references drive the hero appearance.
+        # Using reference_images (not preamble) lets the model generate a fresh image
+        # rather than reproducing the template unchanged.
+        prompt = _SCENE_GUIDED_PROMPT.format(art_style=hero.art_style)
+        refs = [template_image, hero.canonical_portrait_png] + list(hero.source_photos)
+        return gen.generate(prompt, reference_images=refs)
+
     if spec.mode == "lineart":
-        return _LINEART_DIRECTIVE + spec.image_prompt
-    return f"{spec.image_prompt}, {hero.art_style}. No text, no words, no letters."
-
-
-def generate_page(spec: PageSpec, hero: CharacterSheet, gen: ImageGenerator) -> bytes:
-    prompt = _build_prompt(spec, hero)
-    return gen.generate(prompt, reference_images=[hero.canonical_portrait_png])
+        prompt = _LINEART_DIRECTIVE + spec.image_prompt
+    else:
+        prompt = _GENERATION_PROMPT.format(scene=spec.image_prompt, art_style=hero.art_style)
+    refs = [hero.canonical_portrait_png] + list(hero.source_photos)
+    return gen.generate(prompt, reference_images=refs)

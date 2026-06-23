@@ -14,8 +14,17 @@ _TINY_PNG = (
 
 
 class ImageGenerator(Protocol):
-    def generate(self, prompt: str, reference_images: list[bytes] | None = None) -> bytes:
-        """Return PNG bytes for the prompt, optionally conditioned on reference images."""
+    def generate(
+        self,
+        prompt: str,
+        reference_images: list[bytes] | None = None,
+        preamble_images: list[bytes] | None = None,
+    ) -> bytes:
+        """Return PNG bytes for the prompt.
+
+        preamble_images: placed before prompt text (image editing source).
+        reference_images: placed after prompt text (style/face references).
+        """
         ...
 
 
@@ -25,6 +34,15 @@ class FakeImageGenerator:
     def __init__(self) -> None:
         self.calls: list[dict] = []
 
-    def generate(self, prompt: str, reference_images: list[bytes] | None = None) -> bytes:
-        self.calls.append({"prompt": prompt, "reference_images": reference_images})
+    def generate(
+        self,
+        prompt: str,
+        reference_images: list[bytes] | None = None,
+        preamble_images: list[bytes] | None = None,
+    ) -> bytes:
+        self.calls.append({
+            "prompt": prompt,
+            "reference_images": reference_images,
+            "preamble_images": preamble_images,
+        })
         return _TINY_PNG

@@ -137,12 +137,10 @@
 
       <div id="thumbs" class="flex gap-3 mt-4 flex-wrap"></div>
 
-      <div id="hero-result" class="hidden mt-6 flex items-center gap-4 p-4 bg-purple-50 rounded-lg">
-        <img id="portrait" class="w-20 h-20 rounded-lg object-cover border border-purple-200" />
-        <div>
-          <p class="text-sm font-medium text-purple-900">Hero character ready</p>
-          <p class="text-xs text-purple-600">Consistent reference portrait generated.</p>
-        </div>
+      <div id="hero-result" class="hidden mt-6 p-4 bg-purple-50 rounded-xl">
+        <p class="text-sm font-semibold text-purple-900 mb-3">Choose your hero portrait</p>
+        <div id="portrait-grid" class="flex gap-4 flex-wrap"></div>
+        <p id="portrait-chosen" class="hidden mt-3 text-xs text-purple-600 font-medium">Portrait selected — ready to generate!</p>
       </div>
 
       <div class="mt-6 flex justify-between">
@@ -155,11 +153,46 @@
 
     <!-- STEP 3 -->
     <section id="step-3" class="hidden bg-white border border-gray-200 rounded-xl shadow-sm p-6">
-      <h2 class="text-base font-bold mb-1">3 · Generate the storybook</h2>
-      <p class="text-xs text-gray-500 mb-4">Each page is drawn from the template, starring your hero.</p>
+      <h2 class="text-base font-bold mb-1">3 · Preview &amp; Generate</h2>
+      <p class="text-xs text-gray-500 mb-4">Test a single page first, then generate the full book.</p>
+
+      <!-- Template preview panel -->
+      <div class="mb-6 border border-gray-100 rounded-xl p-4 bg-gray-50">
+        <div class="flex items-center justify-between mb-3">
+          <h3 class="text-sm font-semibold text-gray-700">Template pages</h3>
+          <div class="flex items-center gap-2">
+            <p id="canonical-status" class="text-xs text-gray-400"></p>
+            <button id="render-canonical-btn" class="text-xs bg-gray-700 text-white rounded-lg px-3 py-1.5 hover:bg-gray-900 transition flex items-center gap-1.5">
+              <span id="render-canonical-label">Render canonical</span>
+            </button>
+          </div>
+        </div>
+
+        <div id="page-list" class="space-y-3 max-h-72 overflow-y-auto pr-1"></div>
+
+        <div class="mt-4 flex items-center gap-3 flex-wrap">
+          <select id="test-page-index" class="border border-gray-300 rounded-lg px-2 py-1.5 text-xs"></select>
+          <button id="test-page-btn" class="bg-purple-600 text-white text-xs rounded-lg px-4 py-1.5 hover:bg-purple-700 transition flex items-center gap-1.5">
+            <span id="test-page-label">Test personalized image</span>
+          </button>
+        </div>
+
+        <div id="test-result" class="hidden mt-4">
+          <div class="flex gap-4 flex-wrap">
+            <div id="canonical-compare" class="hidden">
+              <p class="text-xs text-gray-500 mb-1">Original template:</p>
+              <img id="canonical-img" class="rounded-lg border border-gray-200 w-48" alt="Original" />
+            </div>
+            <div>
+              <p class="text-xs text-gray-500 mb-1">Personalized:</p>
+              <img id="test-img" class="rounded-lg border border-purple-200 w-48" alt="Personalized" />
+            </div>
+          </div>
+        </div>
+      </div>
 
       <button id="generate" class="bg-gray-900 text-white text-sm rounded-lg px-5 py-2 hover:bg-gray-700 transition-colors disabled:opacity-50 flex items-center gap-2">
-        <span id="generate-label">Generate book</span>
+        <span id="generate-label">Generate full book</span>
       </button>
 
       <div id="book-done" class="hidden mt-6 p-4 bg-green-50 rounded-lg">
@@ -223,8 +256,9 @@
       else toast('No templates found.', 'error');
     }
 
+
     function renderTemplate(tpl) {
-      state.current = tpl;
+      state.current = { ...tpl, rawPages: tpl.rawPages || [] };
       $('template-desc').textContent = `${tpl.pages} pages · ${tpl.mode === 'color' ? 'full color' : 'line art'} · ${tpl.art_style}`;
       const box = $('variables');
       box.innerHTML = tpl.variables.map((v) => {
@@ -352,13 +386,9 @@
       es.onmessage = (ev) => {
         if (ev.data === '[DONE]') {
           es.close();
-          state.heroReady = true;
-          $('portrait').src = `/api/storyforge/${name}/portrait?t=${Date.now()}`;
-          $('hero-result').classList.remove('hidden');
           $('build-hero-label').textContent = 'Rebuild hero';
           btn.disabled = false;
-          toast('Hero ready! Continue to generate.');
-          showNext3();
+          renderPortraitPicker(name, 2);
           return;
         }
         if (ev.data.startsWith('ERROR:')) {
@@ -371,13 +401,158 @@
       es.onerror = () => { es.close(); btn.disabled = false; $('build-hero-label').textContent = 'Build hero character'; };
     };
 
+    async function selectPortrait(name, index) {
+      const res = await fetch(`/api/storyforge/${name}/select-portrait`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ index }),
+      });
+      if (!res.ok) return toast('Failed to select portrait.', 'error');
+      // highlight chosen, grey others
+      document.querySelectorAll('.portrait-card').forEach((card) => {
+        const chosen = parseInt(card.dataset.index, 10) === index;
+        card.classList.toggle('ring-4', chosen);
+        card.classList.toggle('ring-purple-500', chosen);
+        card.classList.toggle('opacity-50', !chosen);
+        card.querySelector('button').textContent = chosen ? 'Selected ✓' : 'Select';
+        card.querySelector('button').disabled = chosen;
+      });
+      $('portrait-chosen').classList.remove('hidden');
+      state.heroReady = true;
+      toast('Portrait selected! Continue to generate.');
+      showNext3();
+    }
+
+    function renderPortraitPicker(name, count) {
+      const grid = $('portrait-grid');
+      grid.innerHTML = '';
+      for (let i = 0; i < count; i++) {
+        const card = document.createElement('div');
+        card.className = 'portrait-card flex flex-col items-center gap-2 rounded-xl border border-purple-200 bg-white p-2 cursor-pointer transition';
+        card.dataset.index = i;
+        const img = document.createElement('img');
+        img.src = `/api/storyforge/${name}/portrait/${i}?t=${Date.now()}`;
+        img.className = 'w-28 h-28 rounded-lg object-cover';
+        img.alt = `Portrait variant ${i + 1}`;
+        const btn = document.createElement('button');
+        btn.textContent = `Select`;
+        btn.className = 'w-full text-xs bg-purple-600 text-white rounded-lg px-3 py-1.5 hover:bg-purple-700 transition';
+        btn.onclick = () => selectPortrait(name, i);
+        card.appendChild(img);
+        card.appendChild(btn);
+        grid.appendChild(card);
+      }
+      $('hero-result').classList.remove('hidden');
+      $('portrait-chosen').classList.add('hidden');
+    }
+
+    function renderPageList() {
+      const tpl = state.current;
+      if (!tpl) return;
+      const vars = collectVars();
+      const slug = tpl.slug;
+      const list = $('page-list');
+      const sel = $('test-page-index');
+      list.innerHTML = '';
+      sel.innerHTML = '';
+      let renderedCount = 0;
+      (tpl.rawPages || []).forEach((p, i) => {
+        let text = p.text;
+        Object.entries(vars).forEach(([k, v]) => {
+          text = text.replaceAll(`{${k}}`, v || `{${k}}`);
+        });
+        const canonicalUrl = `/api/admin/templates/${slug}/canonical/${i}`;
+        const row = document.createElement('div');
+        row.className = 'flex gap-3 items-start p-2 rounded bg-white border border-gray-100';
+        const img = document.createElement('img');
+        img.src = canonicalUrl + `?t=${Date.now()}`;
+        img.className = 'w-20 h-16 object-cover rounded border border-gray-200 flex-shrink-0';
+        img.onerror = () => { img.style.display = 'none'; };
+        img.onload = () => { renderedCount++; updateCanonicalStatus(renderedCount, tpl.rawPages.length); };
+        const txt = document.createElement('p');
+        txt.className = 'text-xs text-gray-600 leading-relaxed';
+        txt.textContent = `P${i + 1}: ${text.slice(0, 110)}${text.length > 110 ? '…' : ''}`;
+        row.appendChild(img);
+        row.appendChild(txt);
+        list.appendChild(row);
+        const opt = document.createElement('option');
+        opt.value = i;
+        opt.textContent = `Page ${i + 1}`;
+        sel.appendChild(opt);
+      });
+    }
+
+    function updateCanonicalStatus(done, total) {
+      $('canonical-status').textContent = done === total
+        ? `${total}/${total} canonical pages ready — face-swap mode active`
+        : done > 0 ? `${done}/${total} canonical pages ready` : '';
+    }
+
+    $('render-canonical-btn').onclick = () => {
+      const slug = state.current?.slug;
+      if (!slug) return toast('Select a template first.', 'error');
+      const btn = $('render-canonical-btn');
+      btn.disabled = true;
+      $('render-canonical-label').innerHTML = '<span class="inline-block w-3 h-3 border-2 border-white border-t-transparent rounded-full spin"></span> Rendering…';
+      $('log').textContent = '';
+      const es = new EventSource(`/stream/admin/templates/${slug}/render-canonical`);
+      es.onmessage = (ev) => {
+        if (ev.data === '[DONE]') {
+          es.close();
+          btn.disabled = false;
+          $('render-canonical-label').textContent = 'Re-render canonical';
+          toast('Canonical pages ready — personalization now uses face-swap mode.');
+          renderPageList();
+          return;
+        }
+        if (ev.data.startsWith('ERROR:')) {
+          es.close();
+          btn.disabled = false;
+          $('render-canonical-label').textContent = 'Render canonical';
+          return toast(ev.data, 'error');
+        }
+        log(ev.data);
+      };
+      es.onerror = () => { es.close(); btn.disabled = false; $('render-canonical-label').textContent = 'Render canonical'; };
+    };
+
+    async function testPage() {
+      const name = $('book-id').value.trim();
+      const slug = state.current?.slug;
+      const pageIndex = parseInt($('test-page-index').value, 10);
+      const vars = collectVars();
+      const btn = $('test-page-btn');
+      btn.disabled = true;
+      $('test-page-label').innerHTML = '<span class="inline-block w-3 h-3 border-2 border-white border-t-transparent rounded-full spin"></span>';
+      $('test-result').classList.add('hidden');
+      const params = new URLSearchParams({ slug, page_index: pageIndex, ...vars });
+      const res = await fetch(`/api/storyforge/${name}/test-page?${params}`);
+      btn.disabled = false;
+      $('test-page-label').textContent = 'Test personalized image';
+      if (!res.ok) {
+        const e = await res.json().catch(() => ({}));
+        return toast('Test failed: ' + (e.detail || res.status), 'error');
+      }
+      const blob = await res.blob();
+      $('test-img').src = URL.createObjectURL(blob);
+      // show canonical alongside for comparison if available
+      const canonicalSrc = `/api/admin/templates/${slug}/canonical/${pageIndex}?t=${Date.now()}`;
+      const ci = $('canonical-img');
+      ci.src = canonicalSrc;
+      ci.onload = () => $('canonical-compare').classList.remove('hidden');
+      ci.onerror = () => $('canonical-compare').classList.add('hidden');
+      $('test-result').classList.remove('hidden');
+    }
+
+    $('test-page-btn').onclick = testPage;
+
     function showNext3() {
       if ($('to-3')) return;
       const b = document.createElement('button');
       b.id = 'to-3';
       b.className = 'ml-3 bg-gray-900 text-white text-sm rounded-lg px-5 py-2 hover:bg-gray-700 transition-colors';
-      b.textContent = 'Next: generate →';
-      b.onclick = () => setStep(3);
+      b.textContent = 'Next: preview & generate →';
+      b.onclick = () => { renderPageList(); setStep(3); };
       $('build-hero').after(b);
     }
 

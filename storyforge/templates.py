@@ -33,6 +33,8 @@ def parse_template(data: dict, slug: str = "") -> Template:
                 beat=p.get("beat", ""),
                 text=p["text"],
                 image_prompt=p["image_prompt"],
+                core_background_anchors=list(p.get("core_background_anchors", [])),
+                hero_action_and_emotion=p.get("hero_action_and_emotion", ""),
             )
             for p in data.get("pages", [])
         ]
@@ -44,6 +46,7 @@ def parse_template(data: dict, slug: str = "") -> Template:
             variables=variables,
             pages=pages,
             slug=slug,
+            fixed_wardrobe_description=data.get("fixed_wardrobe_description", ""),
         )
     except (KeyError, TypeError) as exc:
         raise TemplateError(f"Malformed template {slug!r}: missing field {exc}") from exc

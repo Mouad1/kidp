@@ -15,6 +15,8 @@ class PageBeat:
     beat: str
     text: str
     image_prompt: str
+    core_background_anchors: list[str] = field(default_factory=list)
+    hero_action_and_emotion: str = ""
 
 
 @dataclass
@@ -26,6 +28,7 @@ class Template:
     variables: list[Variable]
     pages: list[PageBeat]
     slug: str = ""
+    fixed_wardrobe_description: str = ""
 
 
 @dataclass
@@ -43,3 +46,7 @@ class PageSpec:
     image_prompt: str
     mode: str
     reference_required: bool = True
+    core_background_anchors: list[str] = field(default_factory=list)
+    hero_action_and_emotion: str = ""
+    fixed_wardrobe_description: str = ""
+

@@ -35,6 +35,9 @@ def resolve(template: Template, variables: dict[str, str], hero: CharacterSheet)
                 text=_substitute(page.text, text_mapping),
                 image_prompt=_substitute(page.image_prompt, image_mapping),
                 mode=template.mode,
+                core_background_anchors=list(page.core_background_anchors),
+                hero_action_and_emotion=_substitute(page.hero_action_and_emotion, image_mapping),
+                fixed_wardrobe_description=_substitute(template.fixed_wardrobe_description, image_mapping),
             )
         )
     return specs

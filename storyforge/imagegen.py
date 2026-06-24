@@ -19,11 +19,13 @@ class ImageGenerator(Protocol):
         prompt: str,
         reference_images: list[bytes] | None = None,
         preamble_images: list[bytes] | None = None,
+        scene_reference_images: list[bytes] | None = None,
     ) -> bytes:
         """Return PNG bytes for the prompt.
 
-        preamble_images: placed before prompt text (image editing source).
-        reference_images: placed after prompt text (style/face references).
+        scene_reference_images: scene composition guide, placed before prompt with label.
+        preamble_images: placed before prompt text (image editing source, legacy).
+        reference_images: placed after prompt text (face/style references).
         """
         ...
 
@@ -39,10 +41,12 @@ class FakeImageGenerator:
         prompt: str,
         reference_images: list[bytes] | None = None,
         preamble_images: list[bytes] | None = None,
+        scene_reference_images: list[bytes] | None = None,
     ) -> bytes:
         self.calls.append({
             "prompt": prompt,
             "reference_images": reference_images,
             "preamble_images": preamble_images,
+            "scene_reference_images": scene_reference_images,
         })
         return _TINY_PNG

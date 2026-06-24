@@ -57,3 +57,29 @@ def test_select_without_options_rejected():
     bad["variables"][1]["options"] = []
     with pytest.raises(TemplateError, match="options"):
         validate_template(parse_template(bad, slug="x"))
+
+
+def test_parse_template_with_structured_prompt_data():
+    data = {
+        "name": "Explorer",
+        "mode": "color",
+        "language_default": "fr",
+        "art_style": "watercolor",
+        "fixed_wardrobe_description": "a blue backpack and yellow boots",
+        "variables": [
+            {"key": "HERO_NAME", "label": "Name", "type": "text"},
+        ],
+        "pages": [
+            {
+                "beat": "intro",
+                "text": "{HERO_NAME} in forest",
+                "image_prompt": "{HERO} in forest",
+                "core_background_anchors": ["tall oak tree", "mossy log", "stone path"],
+                "hero_action_and_emotion": "kneeling to inspect a snail happily",
+            },
+        ],
+    }
+    tpl = parse_template(data, slug="explorer")
+    assert tpl.fixed_wardrobe_description == "a blue backpack and yellow boots"
+    assert tpl.pages[0].core_background_anchors == ["tall oak tree", "mossy log", "stone path"]
+    assert tpl.pages[0].hero_action_and_emotion == "kneeling to inspect a snail happily"

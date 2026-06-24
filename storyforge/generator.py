@@ -33,13 +33,8 @@ def generate_page(
     template_image: bytes | None = None,
 ) -> bytes:
     if template_image is not None:
-        # Scene-guided mode: template image is the FIRST reference so Gemini uses it
-        # for scene composition, while portrait references drive the hero appearance.
-        # Using reference_images (not preamble) lets the model generate a fresh image
-        # rather than reproducing the template unchanged.
-        prompt = _SCENE_GUIDED_PROMPT.format(art_style=hero.art_style)
-        refs = [template_image, hero.canonical_portrait_png] + list(hero.source_photos)
-        return gen.generate(prompt, reference_images=refs)
+        from storyforge.faceswap import run_hybrid_faceswap
+        return run_hybrid_faceswap(spec, hero, gen, template_image)
 
     if spec.mode == "lineart":
         prompt = _LINEART_DIRECTIVE + spec.image_prompt
